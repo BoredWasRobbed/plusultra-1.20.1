@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.entity.Entity;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
@@ -19,6 +20,8 @@ public class PlusUltraClientNetworking {
     }
 
     private static void handleSync(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
+        int entityId = buf.readInt(); // Read Entity ID
+
         boolean hasQuirk = buf.readBoolean();
         String quirkIdStr = hasQuirk ? buf.readString() : null;
         boolean isAwakened = buf.readBoolean();
@@ -40,13 +43,28 @@ public class PlusUltraClientNetworking {
             dims[i] = buf.readString();
         }
         int selectedAnchor = buf.readInt();
-
-        // NEW: Read Placement State
         int placementState = buf.readInt();
+        boolean regenActive = buf.readBoolean();
+
+        // AFO Data
+        boolean isAFO = buf.readBoolean();
+        int stolenCount = buf.readInt();
+        String[] stolen = new String[stolenCount];
+        for(int i=0; i<stolenCount; i++) stolen[i] = buf.readString();
+
+        int passiveCount = buf.readInt();
+        String[] passives = new String[passiveCount];
+        for(int i=0; i<passiveCount; i++) passives[i] = buf.readString();
+
+        boolean stealActive = buf.readBoolean();
+        boolean giveActive = buf.readBoolean();
+        String quirkToGive = buf.readString();
 
         client.execute(() -> {
-            if (client.player == null) return;
-            IQuirkData data = (IQuirkData) client.player;
+            if (client.world == null) return;
+
+            Entity entity = client.world.getEntityById(entityId);
+            if (!(entity instanceof IQuirkData data)) return; // Works for Player AND Mobs now
 
             if (hasQuirk) data.setQuirk(new Identifier(quirkIdStr));
             else data.setQuirk(null);
@@ -66,8 +84,20 @@ public class PlusUltraClientNetworking {
             int diff = selectedAnchor - current;
             if (diff != 0) data.cycleSelectedAnchor(diff);
 
-            // Set State
-            data.setPlacementState(placementState, null, GameMode.SURVIVAL); // Client doesn't need original pos memory
+            data.setPlacementState(placementState, null, GameMode.SURVIVAL);
+            data.setRegenActive(regenActive);
+
+            data.setAllForOne(isAFO);
+
+            data.getStolenQuirks().clear();
+            for(String s : stolen) data.addStolenQuirk(s);
+
+            data.getActivePassives().clear();
+            for(String s : passives) data.togglePassive(s);
+
+            data.setStealActive(stealActive);
+            data.setGiveActive(giveActive);
+            data.setQuirkToGive(quirkToGive);
         });
     }
 }

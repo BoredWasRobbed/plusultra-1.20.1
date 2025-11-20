@@ -6,7 +6,9 @@ import net.bored.api.quirk.Quirk;
 import net.bored.network.PlusUltraNetworking;
 import net.bored.registry.QuirkRegistry;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -36,11 +38,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.ArrayList;
 import java.util.List;
 
-@Mixin(PlayerEntity.class)
-public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkData {
+@Mixin(LivingEntity.class)
+public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkData {
 
-    protected PlayerQuirkMixin(EntityType<? extends LivingEntity> entityType, World world) {
-        super(entityType, world);
+    public LivingEntityQuirkMixin(EntityType<?> type, World world) {
+        super(type, world);
     }
 
     @Unique private Identifier quirkId = null;
@@ -79,30 +81,28 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Unique private boolean giveActive = false;
     @Unique private String quirkToGive = "";
 
-    // --- INTERFACE IMPLEMENTATION ---
-
     @Override public Quirk getQuirk() { if (quirkId == null) return null; return QuirkRegistry.get(quirkId); }
 
     @Override public void setQuirk(Identifier id) {
+        if (id == null) {
+            this.quirkId = null;
+            this.cooldowns = new int[0];
+            this.syncQuirkData();
+            return;
+        }
+
         this.quirkId = id;
         this.selectedSlot = 0;
 
-        // If NOT All For One, reset everything as normal
-        if (!this.isAllForOne) {
-            this.isAwakened = false;
-            this.stamina = this.maxStamina;
-            this.level = 1;
-            this.xp = 0;
-            this.portalTimer = 0;
-            this.portalImmunity = 0;
-            this.riftTimer = 0;
-            this.placementState = 0;
-            this.regenActive = false;
-            this.anchorPositions.clear();
-            this.anchorDimensions.clear();
-            this.selectedAnchorIndex = 0;
+        String idStr = id.toString();
+
+        // Handle AFO Flag
+        if (idStr.equals("plusultra:all_for_one")) {
+            this.isAllForOne = true;
         }
-        // If we ARE All For One, we RETAIN data (Anchors, Passives, Levels) when switching "Equipped" quirk.
+
+        // Auto-Learn: Add to inventory
+        addStolenQuirk(idStr);
 
         Quirk q = getQuirk();
         if (q != null) this.cooldowns = new int[q.getAbilities().size()];
@@ -126,9 +126,9 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
             this.xp -= max;
             this.level++;
             max = getMaxXp();
-            if (!this.getWorld().isClient) {
+            if (!this.getWorld().isClient && (Object)this instanceof PlayerEntity player) {
                 this.getWorld().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 1.0f, 1.0f);
-                ((PlayerEntity)(Object)this).sendMessage(Text.literal("Quirk Level Up! (" + this.level + ")").formatted(Formatting.GOLD, Formatting.BOLD), true);
+                player.sendMessage(Text.literal("Quirk Level Up! (" + this.level + ")").formatted(Formatting.GOLD, Formatting.BOLD), true);
             }
         }
     }
@@ -207,8 +207,22 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Override public void setAllForOne(boolean isAFO) { this.isAllForOne = isAFO; this.syncQuirkData(); }
 
     @Override public List<String> getStolenQuirks() { return stolenQuirks; }
-    @Override public void addStolenQuirk(String quirkId) { if(!stolenQuirks.contains(quirkId)) stolenQuirks.add(quirkId); this.syncQuirkData(); }
-    @Override public void removeStolenQuirk(String quirkId) { stolenQuirks.remove(quirkId); this.syncQuirkData(); }
+
+    @Override public void addStolenQuirk(String quirkId) {
+        // FIXED: Prevent "All For One" from being added if it's already there
+        // Other quirks can be added as duplicates if desired (e.g., 2x Warp Gate),
+        // but AFO should be unique to prevent logic issues.
+        if (quirkId.equals("plusultra:all_for_one") && stolenQuirks.contains(quirkId)) {
+            return;
+        }
+        stolenQuirks.add(quirkId);
+        this.syncQuirkData();
+    }
+
+    @Override public void removeStolenQuirk(String quirkId) {
+        stolenQuirks.remove(quirkId);
+        this.syncQuirkData();
+    }
 
     @Override public List<String> getActivePassives() { return activePassives; }
     @Override public void togglePassive(String quirkId) {
@@ -227,12 +241,12 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Override public void setQuirkToGive(String quirkId) { this.quirkToGive = quirkId; this.syncQuirkData(); }
 
 
-    // --- SYNCING ---
     @Override public void syncQuirkData() {
         if (this.getWorld().isClient) return;
-        if (!((Object)this instanceof ServerPlayerEntity player)) return;
 
         PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeInt(this.getId());
+
         boolean has = (this.quirkId != null);
         buf.writeBoolean(has);
         if (has) buf.writeString(this.quirkId.toString());
@@ -256,7 +270,6 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         buf.writeInt(this.placementState);
         buf.writeBoolean(this.regenActive);
 
-        // Sync AFO Data
         buf.writeBoolean(this.isAllForOne);
         buf.writeInt(this.stolenQuirks.size());
         for(String s : this.stolenQuirks) buf.writeString(s);
@@ -266,7 +279,13 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         buf.writeBoolean(this.giveActive);
         buf.writeString(this.quirkToGive);
 
-        ServerPlayNetworking.send(player, PlusUltraNetworking.SYNC_DATA_PACKET, buf);
+        for (ServerPlayerEntity player : PlayerLookup.tracking((Entity)(Object)this)) {
+            ServerPlayNetworking.send(player, PlusUltraNetworking.SYNC_DATA_PACKET, buf);
+        }
+
+        if ((Object)this instanceof ServerPlayerEntity self) {
+            ServerPlayNetworking.send(self, PlusUltraNetworking.SYNC_DATA_PACKET, buf);
+        }
     }
 
     @Inject(method = "writeCustomDataToNbt", at = @At("TAIL"))
@@ -281,7 +300,6 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         nbt.putFloat("QuirkXp", this.xp);
         nbt.putBoolean("RegenActive", this.regenActive);
 
-        // Save AFO
         nbt.putBoolean("IsAFO", this.isAllForOne);
         NbtList stolenList = new NbtList();
         for(String s : stolenQuirks) stolenList.add(NbtString.of(s));
@@ -316,7 +334,6 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         if (nbt.contains("QuirkXp")) this.xp = nbt.getFloat("QuirkXp");
         if (nbt.contains("RegenActive")) this.regenActive = nbt.getBoolean("RegenActive");
 
-        // Read AFO
         this.isAllForOne = nbt.getBoolean("IsAFO");
         this.stolenQuirks.clear();
         if (nbt.contains("StolenQuirks")) {
@@ -348,23 +365,19 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void tickStaminaAndCooldowns(CallbackInfo ci) {
-        // Tick Main Quirk
         if (this.quirkId != null) {
             Quirk quirk = getQuirk();
-            if (quirk != null) quirk.onTick((PlayerEntity)(Object)this);
+            if (quirk != null) quirk.onTick((LivingEntity)(Object)this);
             this.tickCooldowns();
             this.tickPortal();
             this.tickRift();
         }
 
-        // Tick AFO Passives (Multi-Quirk support)
-        if (this.isAllForOne && !this.activePassives.isEmpty()) {
+        if (!this.activePassives.isEmpty()) {
             for (String passiveId : this.activePassives) {
-                // Don't double tick the active quirk
                 if (this.quirkId != null && this.quirkId.toString().equals(passiveId)) continue;
-
                 Quirk q = QuirkRegistry.get(new Identifier(passiveId));
-                if (q != null) q.onTick((PlayerEntity)(Object)this);
+                if (q != null) q.onTick((LivingEntity)(Object)this);
             }
         }
 

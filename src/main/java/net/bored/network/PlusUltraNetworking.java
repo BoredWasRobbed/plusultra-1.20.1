@@ -18,10 +18,12 @@ public class PlusUltraNetworking {
     public static final Identifier ACTIVATE_ABILITY_PACKET = new Identifier("plusultra", "activate_ability");
     public static final Identifier CYCLE_ABILITY_PACKET = new Identifier("plusultra", "cycle_ability");
     public static final Identifier SYNC_DATA_PACKET = new Identifier("plusultra", "sync_data");
+    public static final Identifier AFO_OPERATION_PACKET = new Identifier("plusultra", "afo_operation");
 
     public static void init() {
         ServerPlayNetworking.registerGlobalReceiver(ACTIVATE_ABILITY_PACKET, PlusUltraNetworking::handleActivate);
         ServerPlayNetworking.registerGlobalReceiver(CYCLE_ABILITY_PACKET, PlusUltraNetworking::handleCycle);
+        ServerPlayNetworking.registerGlobalReceiver(AFO_OPERATION_PACKET, PlusUltraNetworking::handleAFO);
     }
 
     private static void handleActivate(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
@@ -75,6 +77,42 @@ public class PlusUltraNetworking {
                 player.sendMessage(Text.literal("Anchor Selected: " + (data.getSelectedAnchorIndex() + 1) + "/" + data.getWarpAnchorCount()).formatted(Formatting.LIGHT_PURPLE), true);
             } else {
                 data.cycleSlot(direction);
+            }
+        });
+    }
+
+    private static void handleAFO(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
+        int opCode = buf.readInt(); // 0 = Equip, 1 = Toggle Passive, 2 = Select Give
+        String quirkId = buf.readString();
+
+        server.execute(() -> {
+            IQuirkData data = (IQuirkData) player;
+
+            // FIXED: Removed check for data.isAllForOne().
+            // Now regular players with multiple quirks can switch too.
+
+            if (opCode == 0) {
+                // Equip Logic
+                boolean hasQuirk = data.getStolenQuirks().contains(quirkId);
+                boolean isAFOBase = quirkId.equals("plusultra:all_for_one") && data.isAllForOne();
+
+                if (hasQuirk || isAFOBase) {
+                    data.setQuirk(new Identifier(quirkId));
+                    player.sendMessage(Text.literal("Equipped: " + quirkId).formatted(Formatting.GOLD), true);
+                }
+            } else if (opCode == 1) {
+                // Toggle Passive
+                if (data.getStolenQuirks().contains(quirkId)) {
+                    data.togglePassive(quirkId);
+                    boolean nowActive = data.getActivePassives().contains(quirkId);
+                    player.sendMessage(Text.literal("Passive " + (nowActive ? "ON" : "OFF") + ": " + quirkId).formatted(nowActive ? Formatting.GREEN : Formatting.RED), true);
+                }
+            } else if (opCode == 2) {
+                // Select for Give - Only AFO users can use the 'Give' ability, but setting the target is harmless
+                if (data.getStolenQuirks().contains(quirkId)) {
+                    data.setQuirkToGive(quirkId);
+                    player.sendMessage(Text.literal("Ready to Give: " + quirkId).formatted(Formatting.YELLOW), true);
+                }
             }
         });
     }

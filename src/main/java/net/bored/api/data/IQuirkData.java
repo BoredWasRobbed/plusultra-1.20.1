@@ -6,6 +6,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.GameMode;
 import net.minecraft.world.World;
+import java.util.List;
 
 public interface IQuirkData {
     // Quirk
@@ -51,7 +52,7 @@ public interface IQuirkData {
     int getSelectedAnchorIndex();
     void cycleSelectedAnchor(int direction);
 
-    // Portal Data (Move 2)
+    // Portal Data
     void setPortal(Vec3d origin, int ticks);
     Vec3d getPortalOrigin();
     int getPortalTimer();
@@ -59,7 +60,7 @@ public interface IQuirkData {
     int getPortalImmunity();
     void setPortalImmunity(int ticks);
 
-    // Dimensional Rift Data (Move 3)
+    // Dimensional Rift Data
     void setPlacementState(int state, Vec3d originalPos, GameMode originalMode);
     int getPlacementState();
     Vec3d getPlacementOrigin();
@@ -74,9 +75,30 @@ public interface IQuirkData {
     int getRiftTimer();
     void tickRift();
 
-    // --- NEW: Super Regeneration Data ---
+    // Super Regeneration Data
     boolean isRegenActive();
     void setRegenActive(boolean active);
+
+    // --- ALL FOR ONE DATA ---
+    boolean isAllForOne(); // Is this player an AFO user natively?
+    void setAllForOne(boolean isAFO);
+
+    List<String> getStolenQuirks(); // List of Quirk IDs
+    void addStolenQuirk(String quirkId);
+    void removeStolenQuirk(String quirkId);
+
+    List<String> getActivePassives(); // Quirks that are "toggled on" in background
+    void togglePassive(String quirkId);
+
+    // Modes for the AFO moves
+    boolean isStealActive();
+    void setStealActive(boolean active);
+
+    boolean isGiveActive();
+    void setGiveActive(boolean active);
+
+    String getQuirkToGive();
+    void setQuirkToGive(String quirkId);
 
     // Sync
     void syncQuirkData();

@@ -1,5 +1,7 @@
 package net.bored;
 
+import net.bored.api.data.IQuirkData;
+import net.bored.client.gui.AllForOneRadialScreen;
 import net.bored.client.gui.QuirkHud;
 import net.bored.network.PlusUltraNetworking;
 import net.bored.network.PlusUltraClientNetworking;
@@ -22,16 +24,14 @@ public class PlusUltraClient implements ClientModInitializer {
 
 	public static KeyBinding activateKey;
 	public static KeyBinding cycleKey;
+	public static KeyBinding wheelKey;
 
 	@Override
 	public void onInitializeClient() {
 		PlusUltraClientNetworking.init();
 		HudRenderCallback.EVENT.register(new QuirkHud());
 
-		// REGISTER RENDERER
 		EntityRendererRegistry.register(PlusUltra.WARP_PROJECTILE, FlyingItemEntityRenderer::new);
-
-		// Register Villain Renderer (Uses Zombie Renderer for now)
 		EntityRendererRegistry.register(PlusUltra.VILLAIN_ENTITY, ZombieEntityRenderer::new);
 
 		activateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -48,9 +48,26 @@ public class PlusUltraClient implements ClientModInitializer {
 				"category.plusultra"
 		));
 
+		wheelKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+				"key.plusultra.wheel",
+				InputUtil.Type.KEYSYM,
+				GLFW.GLFW_KEY_V,
+				"category.plusultra"
+		));
+
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (activateKey.wasPressed()) {
 				ClientPlayNetworking.send(PlusUltraNetworking.ACTIVATE_ABILITY_PACKET, PacketByteBufs.create());
+			}
+
+			while (wheelKey.wasPressed()) {
+				// UPDATED: Allow opening if player has ANY quirks in storage OR is AFO
+				if (client.player != null) {
+					IQuirkData data = (IQuirkData)client.player;
+					if (data.isAllForOne() || !data.getStolenQuirks().isEmpty()) {
+						client.setScreen(new AllForOneRadialScreen(data));
+					}
+				}
 			}
 		});
 	}
