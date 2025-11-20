@@ -34,6 +34,8 @@ import net.bored.network.PlusUltraNetworking;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
 public class PlusUltra implements ModInitializer {
 	public static final String MOD_ID = "plusultra";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -79,9 +81,22 @@ public class PlusUltra implements ModInitializer {
 					String stolenId = target.getQuirk().getId().toString();
 					attacker.addStolenQuirk(stolenId);
 
-					// FIXED: Remove from target's storage AND unequip
+					// Remove from target's storage AND unequip
 					target.removeStolenQuirk(stolenId);
 					target.setQuirk(null);
+
+					// UPDATED: Auto-swap to another quirk if available
+					List<String> remaining = target.getStolenQuirks();
+					if (!remaining.isEmpty()) {
+						// Pick the first one available in inventory
+						// If duplicates exist, this will just re-equip the same type, which is correct behavior.
+						String nextQuirkId = remaining.get(0);
+						target.setQuirk(new Identifier(nextQuirkId));
+
+						if (entity instanceof PlayerEntity targetPlayer) {
+							targetPlayer.sendMessage(Text.literal("Auto-equipped fallback: " + nextQuirkId).formatted(Formatting.GRAY), true);
+						}
+					}
 
 					attacker.setStealActive(false);
 					player.sendMessage(Text.literal("Stolen: " + stolenId).formatted(Formatting.DARK_PURPLE), true);
