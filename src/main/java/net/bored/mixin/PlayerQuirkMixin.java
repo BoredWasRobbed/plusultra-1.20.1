@@ -142,11 +142,24 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Override public int getCooldown(int slot) { if (slot >= 0 && slot < cooldowns.length) return cooldowns[slot]; return 0; }
     @Override public void setCooldown(int slot, int ticks) { if (slot >= 0 && slot < cooldowns.length) { cooldowns[slot] = ticks; this.syncQuirkData(); } }
     @Override public void tickCooldowns() { for (int i = 0; i < cooldowns.length; i++) { if (cooldowns[i] > 0) cooldowns[i]--; } }
+
+    // --- UPDATED ANCHOR LOGIC ---
     @Override public void addWarpAnchor(Vec3d pos, RegistryKey<World> dimension) {
-        if (this.anchorPositions.size() >= 5) { this.anchorPositions.remove(0); this.anchorDimensions.remove(0); }
-        this.anchorPositions.add(pos); this.anchorDimensions.add(dimension);
-        this.selectedAnchorIndex = this.anchorPositions.size() - 1; this.syncQuirkData();
+        if (this.anchorPositions.size() >= 5) {
+            // If full, overwrite the CURRENTLY selected anchor instead of shifting the list
+            if (this.selectedAnchorIndex >= 0 && this.selectedAnchorIndex < this.anchorPositions.size()) {
+                this.anchorPositions.set(this.selectedAnchorIndex, pos);
+                this.anchorDimensions.set(this.selectedAnchorIndex, dimension);
+            }
+        } else {
+            // If not full, add to the end and select it
+            this.anchorPositions.add(pos);
+            this.anchorDimensions.add(dimension);
+            this.selectedAnchorIndex = this.anchorPositions.size() - 1;
+        }
+        this.syncQuirkData();
     }
+
     @Override public void removeWarpAnchor(int index) { if (index >= 0 && index < anchorPositions.size()) { anchorPositions.remove(index); anchorDimensions.remove(index); if (selectedAnchorIndex >= anchorPositions.size()) selectedAnchorIndex = Math.max(0, anchorPositions.size() - 1); this.syncQuirkData(); } }
     @Override public Vec3d getWarpAnchorPos(int index) { if (index >= 0 && index < anchorPositions.size()) return anchorPositions.get(index); return null; }
     @Override public RegistryKey<World> getWarpAnchorDim(int index) { if (index >= 0 && index < anchorDimensions.size()) return anchorDimensions.get(index); return null; }

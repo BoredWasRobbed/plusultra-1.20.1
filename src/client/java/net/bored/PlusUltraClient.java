@@ -7,10 +7,12 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.render.entity.FlyingItemEntityRenderer;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.network.PacketByteBuf;
 import org.lwjgl.glfw.GLFW;
@@ -24,6 +26,9 @@ public class PlusUltraClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		PlusUltraClientNetworking.init();
 		HudRenderCallback.EVENT.register(new QuirkHud());
+
+		// REGISTER RENDERER
+		EntityRendererRegistry.register(PlusUltra.WARP_PROJECTILE, FlyingItemEntityRenderer::new);
 
 		activateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 				"key.plusultra.activate",
@@ -51,13 +56,10 @@ public class PlusUltraClient implements ClientModInitializer {
 		if (client.player == null) return false;
 
 		if (cycleKey.isPressed()) {
-			int direction = (vertical > 0) ? 1 : -1;
-
+			int direction = (vertical > 0) ? -1 : 1;
 			PacketByteBuf buf = PacketByteBufs.create();
 			buf.writeInt(direction);
-			// Send sneaking status to tell server if we are cycling Abilities or Anchors
 			buf.writeBoolean(client.player.isSneaking());
-
 			ClientPlayNetworking.send(PlusUltraNetworking.CYCLE_ABILITY_PACKET, buf);
 			return true;
 		}

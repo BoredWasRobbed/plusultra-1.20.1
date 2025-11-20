@@ -8,9 +8,8 @@ public abstract class Ability {
     private final String name;
     private final int cooldownTicks;
     private final int staminaCost;
-    private final int requiredLevel; // NEW
+    private final int requiredLevel;
 
-    // Updated Constructor
     public Ability(String name, int cooldownTicks, int staminaCost, int requiredLevel) {
         this.name = name;
         this.cooldownTicks = cooldownTicks;
@@ -19,6 +18,14 @@ public abstract class Ability {
     }
 
     public abstract boolean onActivate(World world, PlayerEntity player);
+
+    /**
+     * If true, onActivate will be called even if the ability is on cooldown.
+     * Use this to handle secondary effects (like closing a rift) inside onActivate.
+     */
+    public boolean canUseWhileOnCooldown() {
+        return false;
+    }
 
     public int getCost(PlayerEntity player) {
         return this.staminaCost;
