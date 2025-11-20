@@ -11,9 +11,12 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.network.PacketByteBuf;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -32,8 +35,11 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Unique private boolean isAwakened = false;
     @Unique private int selectedSlot = 0;
     @Unique private float stamina = 100.0f;
-    @Unique private final float maxStamina = 100.0f;
+    @Unique private float maxStamina = 100.0f; // Removed 'final'
     @Unique private int[] cooldowns = new int[0];
+
+    @Unique private Vec3d warpAnchorPos = null;
+    @Unique private RegistryKey<World> warpAnchorDim = null;
 
     // --- INTERFACE IMPLEMENTATION ---
 
@@ -48,7 +54,9 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         this.quirkId = id;
         this.isAwakened = false;
         this.selectedSlot = 0;
+        // Don't reset max stamina on quirk change, but reset current
         this.stamina = this.maxStamina;
+        this.warpAnchorPos = null;
 
         Quirk q = getQuirk();
         if (q != null) {
@@ -106,8 +114,22 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     }
 
     @Override
+    public float getMaxStamina() {
+        return maxStamina;
+    }
+
+    @Override
     public void setStamina(float stamina) {
         this.stamina = MathHelper.clamp(stamina, 0, maxStamina);
+        this.syncQuirkData();
+    }
+
+    @Override
+    public void setMaxStamina(float max) {
+        this.maxStamina = Math.max(1.0f, max); // Prevent 0 or negative max
+        if (this.stamina > this.maxStamina) {
+            this.stamina = this.maxStamina;
+        }
         this.syncQuirkData();
     }
 
@@ -116,8 +138,6 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         this.stamina = MathHelper.clamp(this.stamina - amount, 0, maxStamina);
         this.syncQuirkData();
     }
-
-    // --- COOLDOWN LOGIC ---
 
     @Override
     public int getCooldown(int slot) {
@@ -131,21 +151,33 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     public void setCooldown(int slot, int ticks) {
         if (slot >= 0 && slot < cooldowns.length) {
             cooldowns[slot] = ticks;
-            this.syncQuirkData(); // Sync when cooldown is set so client sees it immediately
+            this.syncQuirkData();
         }
     }
 
     @Override
     public void tickCooldowns() {
-        boolean changed = false;
         for (int i = 0; i < cooldowns.length; i++) {
             if (cooldowns[i] > 0) {
                 cooldowns[i]--;
-                // Optimization: Don't sync every single tick, rely on Client-side prediction or sync only on 0
-                // or sync every 20 ticks if needed. For now, we won't sync every tick to save bandwidth.
-                // The HUD can predict the countdown if we just send the start value.
             }
         }
+    }
+
+    @Override
+    public void setWarpAnchor(Vec3d pos, RegistryKey<World> dimension) {
+        this.warpAnchorPos = pos;
+        this.warpAnchorDim = dimension;
+    }
+
+    @Override
+    public Vec3d getWarpAnchorPos() {
+        return this.warpAnchorPos;
+    }
+
+    @Override
+    public RegistryKey<World> getWarpAnchorDim() {
+        return this.warpAnchorDim;
     }
 
     // --- SYNCING LOGIC ---
@@ -164,8 +196,8 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         buf.writeBoolean(this.isAwakened);
         buf.writeInt(this.selectedSlot);
         buf.writeFloat(this.stamina);
+        buf.writeFloat(this.maxStamina); // NEW: Sync Max Stamina
 
-        // NEW: Write Cooldowns to packet
         buf.writeInt(this.cooldowns.length);
         for (int cd : this.cooldowns) {
             buf.writeInt(cd);
@@ -184,7 +216,17 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         nbt.putBoolean("IsAwakened", this.isAwakened);
         nbt.putInt("SelectedSlot", this.selectedSlot);
         nbt.putFloat("Stamina", this.stamina);
+        nbt.putFloat("MaxStamina", this.maxStamina); // Save Max
         nbt.putIntArray("Cooldowns", this.cooldowns);
+
+        if (this.warpAnchorPos != null && this.warpAnchorDim != null) {
+            NbtCompound anchorTag = new NbtCompound();
+            anchorTag.putDouble("X", this.warpAnchorPos.x);
+            anchorTag.putDouble("Y", this.warpAnchorPos.y);
+            anchorTag.putDouble("Z", this.warpAnchorPos.z);
+            anchorTag.putString("Dim", this.warpAnchorDim.getValue().toString());
+            nbt.put("WarpAnchor", anchorTag);
+        }
     }
 
     @Inject(method = "readCustomDataFromNbt", at = @At("TAIL"))
@@ -199,8 +241,17 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         if (nbt.contains("Stamina")) {
             this.stamina = nbt.getFloat("Stamina");
         }
+        if (nbt.contains("MaxStamina")) {
+            this.maxStamina = nbt.getFloat("MaxStamina"); // Load Max
+        }
         if (nbt.contains("Cooldowns")) {
             this.cooldowns = nbt.getIntArray("Cooldowns");
+        }
+
+        if (nbt.contains("WarpAnchor")) {
+            NbtCompound anchorTag = nbt.getCompound("WarpAnchor");
+            this.warpAnchorPos = new Vec3d(anchorTag.getDouble("X"), anchorTag.getDouble("Y"), anchorTag.getDouble("Z"));
+            this.warpAnchorDim = RegistryKey.of(RegistryKeys.WORLD, new Identifier(anchorTag.getString("Dim")));
         }
 
         Quirk q = getQuirk();

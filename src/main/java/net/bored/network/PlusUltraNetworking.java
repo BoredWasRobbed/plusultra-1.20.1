@@ -9,8 +9,6 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 
 public class PlusUltraNetworking {
@@ -38,12 +36,12 @@ public class PlusUltraNetworking {
                 if (ability != null) {
                     // 1. Check Cooldown
                     if (data.getCooldown(slot) > 0) {
-                        // Removed text feedback; HUD handles this visually
                         return;
                     }
 
-                    // 2. Check Stamina
-                    float cost = ability.getStaminaCost();
+                    // 2. Check Stamina (Dynamic Cost)
+                    float cost = ability.getCost(player); // Changed to getCost(player)
+
                     if (data.getStamina() >= cost) {
                         if (ability.onActivate(player.getWorld(), player)) {
                             data.consumeStamina(cost);
@@ -52,7 +50,7 @@ public class PlusUltraNetworking {
                             data.setCooldown(slot, ability.getCooldown());
                         }
                     } else {
-                        // Removed text feedback
+                        // Not enough stamina
                     }
                 }
             }

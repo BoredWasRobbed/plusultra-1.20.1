@@ -1,7 +1,10 @@
 package net.bored.api.data;
 
 import net.bored.api.quirk.Quirk;
+import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
 
 public interface IQuirkData {
     // Quirk Accessors
@@ -20,13 +23,20 @@ public interface IQuirkData {
 
     // Stamina Accessors
     float getStamina();
+    float getMaxStamina();
     void setStamina(float stamina);
+    void setMaxStamina(float max); // NEW
     void consumeStamina(float amount);
 
-    // Cooldowns (NEW)
+    // Cooldowns
     int getCooldown(int slot);
     void setCooldown(int slot, int ticks);
-    void tickCooldowns(); // Called every tick
+    void tickCooldowns();
+
+    // Warp Anchor Data
+    void setWarpAnchor(Vec3d pos, RegistryKey<World> dimension);
+    Vec3d getWarpAnchorPos();
+    RegistryKey<World> getWarpAnchorDim();
 
     // Syncing
     void syncQuirkData();

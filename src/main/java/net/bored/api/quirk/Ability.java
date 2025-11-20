@@ -24,6 +24,14 @@ public abstract class Ability {
      */
     public abstract boolean onActivate(World world, PlayerEntity player);
 
+    /**
+     * Gets the stamina cost based on current player state.
+     * Override this for dynamic costs (e.g. Sneaking reduces cost).
+     */
+    public int getCost(PlayerEntity player) {
+        return this.staminaCost;
+    }
+
     public String getName() {
         return name;
     }

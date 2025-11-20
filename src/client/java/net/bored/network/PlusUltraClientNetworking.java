@@ -21,8 +21,8 @@ public class PlusUltraClientNetworking {
         boolean isAwakened = buf.readBoolean();
         int slot = buf.readInt();
         float stamina = buf.readFloat();
+        float maxStamina = buf.readFloat(); // NEW: Read Max Stamina
 
-        // NEW: Read Cooldowns
         int cdLength = buf.readInt();
         int[] cooldowns = new int[cdLength];
         for (int i = 0; i < cdLength; i++) {
@@ -41,9 +41,9 @@ public class PlusUltraClientNetworking {
 
             data.setAwakened(isAwakened);
             data.setSelectedSlot(slot);
+            data.setMaxStamina(maxStamina); // Set Max first!
             data.setStamina(stamina);
 
-            // Apply Cooldowns
             for (int i = 0; i < cdLength; i++) {
                 data.setCooldown(i, cooldowns[i]);
             }

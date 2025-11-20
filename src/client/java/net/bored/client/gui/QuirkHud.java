@@ -26,10 +26,6 @@ public class QuirkHud implements HudRenderCallback {
         Quirk quirk = data.getQuirk();
         if (quirk == null) return;
 
-        // REMOVED: data.tickCooldowns()
-        // The PlayerQuirkMixin already handles ticking this 20 times a second.
-        // Calling it here causes it to tick every frame (FPS), making it too fast.
-
         int width = client.getWindow().getScaledWidth();
         int height = client.getWindow().getScaledHeight();
         TextRenderer font = client.textRenderer;
@@ -41,9 +37,13 @@ public class QuirkHud implements HudRenderCallback {
 
         // --- RENDER STAMINA BAR ---
 
-        float maxStamina = 100.0f;
+        // FIX: Use dynamic Max Stamina instead of 100.0f
+        float maxStamina = data.getMaxStamina();
         float currentStamina = data.getStamina();
+
         int barHeight = 5;
+        // Prevent divide by zero
+        if (maxStamina <= 0) maxStamina = 1;
         int fillWidth = (int) ((currentStamina / maxStamina) * barWidth);
 
         context.fill(x, y, rightEdge, y + barHeight, BACKGROUND_COLOR);
@@ -73,13 +73,11 @@ public class QuirkHud implements HudRenderCallback {
             int cd = data.getCooldown(i);
 
             if (cd > 0) {
-                // Cooldown Display
                 float seconds = cd / 20.0f;
                 displayText = displayText + String.format(" (%.1fs)", seconds);
                 textColor = COOLDOWN_COLOR;
             } else {
-                // Ready Display
-                displayText = displayText + " [" + ability.getStaminaCost() + "]";
+                displayText = displayText + " [" + ability.getCost(client.player) + "]";
                 textColor = isSelected ? 0xFFD700 : 0xAAAAAA;
             }
 
@@ -93,9 +91,9 @@ public class QuirkHud implements HudRenderCallback {
             abilityY -= 12;
         }
 
-        // --- RENDER QUIRK NAME (Uncapitalized) ---
+        // --- RENDER QUIRK NAME ---
 
-        String nameText = quirk.getName().getString(); // REMOVED .toUpperCase()
+        String nameText = quirk.getName().getString();
         if (data.isAwakened()) {
             nameText = "§k||§r " + nameText + " §k||";
             int nameWidth = font.getWidth(nameText);

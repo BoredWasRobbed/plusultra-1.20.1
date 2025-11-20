@@ -5,6 +5,7 @@ import net.bored.api.quirk.Ability;
 import net.bored.api.quirk.Quirk;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
@@ -14,6 +15,7 @@ import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
+import net.minecraft.registry.RegistryKey;
 
 public class WarpGateQuirk extends Quirk {
 
@@ -21,11 +23,8 @@ public class WarpGateQuirk extends Quirk {
         super(new Identifier("plusultra", "warp_gate"), 0x2E003E); // Dark Purple
     }
 
-    // --- AWAKENING CONFIGURATION ---
-
     @Override
     public void registerAwakening() {
-        // Condition: Health < 4 Hearts (8 HP)
         this.setAwakeningCondition((player, data) -> player.getHealth() < 8.0f);
     }
 
@@ -34,30 +33,26 @@ public class WarpGateQuirk extends Quirk {
         player.sendMessage(Text.literal("WARP GATE AWAKENED: MIST BODY ACTIVE").formatted(Formatting.DARK_PURPLE, Formatting.BOLD), true);
         player.getWorld().playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_WITHER_SPAWN, SoundCategory.PLAYERS, 1.0f, 2.0f);
 
-        // Burst of particles
         if (!player.getWorld().isClient) {
-            ((net.minecraft.server.world.ServerWorld) player.getWorld()).spawnParticles(
+            ((ServerWorld) player.getWorld()).spawnParticles(
                     ParticleTypes.PORTAL, player.getX(), player.getY() + 1, player.getZ(), 100, 1.0, 1.0, 1.0, 0.5
             );
         }
     }
 
-    // --- ABILITIES ---
-
     @Override
     public void registerAbilities() {
-        this.addAbility(new Ability("Warp Mist", 40, 25) { // 2s Cooldown, 25 Stamina
+        // ABILITY 1: Warp Mist
+        this.addAbility(new Ability("Warp Mist", 40, 25) {
             @Override
             public boolean onActivate(World world, PlayerEntity player) {
                 if (world.isClient) return false;
 
-                // 1. Calculate Range based on Awakening
                 double range = 20.0;
                 if (player instanceof IQuirkData data && data.isAwakened()) {
-                    range = 60.0; // Massive range boost
+                    range = 60.0;
                 }
 
-                // 2. Raycast to find landing spot
                 Vec3d start = player.getEyePos();
                 Vec3d direction = player.getRotationVector();
                 Vec3d end = start.add(direction.multiply(range));
@@ -69,40 +64,78 @@ public class WarpGateQuirk extends Quirk {
                         player
                 ));
 
-                Vec3d targetPos = end; // Default to max range
+                Vec3d targetPos = end;
                 if (result.getType() != HitResult.Type.MISS) {
                     targetPos = result.getPos();
                 }
 
-                // 3. Teleport Logic
                 world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 1.0f, 1.0f);
-
-                // Move player slightly above target to prevent suffocation
                 player.teleport(targetPos.x, targetPos.y, targetPos.z);
-                player.fallDistance = 0; // Reset fall damage
-
+                player.fallDistance = 0;
                 world.playSound(null, targetPos.x, targetPos.y, targetPos.z, SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 1.0f, 1.0f);
 
                 return true;
             }
+        });
+
+        // ABILITY 2: Gate Anchor (Dynamic Cost)
+        this.addAbility(new Ability("Gate Anchor", 20, 10) {
 
             @Override
-            public int getStaminaCost() {
-                // Reduce cost if awakened (Checking logic strictly inside getter is hard without player context,
-                // so we usually handle cost reduction in the networking logic, but here is a static value)
-                return super.getStaminaCost();
+            public int getCost(PlayerEntity player) {
+                // Sneaking (Set) = 5 Stamina
+                // Standing (Warp) = 40 Stamina
+                return player.isSneaking() ? 5 : 40;
+            }
+
+            @Override
+            public boolean onActivate(World world, PlayerEntity player) {
+                if (world.isClient) return false;
+                if (!(player instanceof IQuirkData data)) return false;
+
+                if (player.isSneaking()) {
+                    // --- SET ANCHOR ---
+                    data.setWarpAnchor(player.getPos(), world.getRegistryKey());
+
+                    player.sendMessage(Text.literal("Gate Anchor Set").formatted(Formatting.LIGHT_PURPLE), true);
+                    world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_END_PORTAL_FRAME_FILL, SoundCategory.PLAYERS, 1.0f, 1.0f);
+
+                    // Return true -> Networking consumes 5 stamina
+                    return true;
+                } else {
+                    // --- TELEPORT TO ANCHOR ---
+                    Vec3d anchor = data.getWarpAnchorPos();
+                    RegistryKey<World> dim = data.getWarpAnchorDim();
+
+                    if (anchor == null || dim == null) {
+                        player.sendMessage(Text.literal("No Anchor Set! (Crouch + Use to set)").formatted(Formatting.RED), true);
+                        return false; // Return false -> No stamina consumed
+                    }
+
+                    if (!dim.equals(world.getRegistryKey())) {
+                        player.sendMessage(Text.literal("Cannot warp across dimensions!").formatted(Formatting.RED), true);
+                        return false;
+                    }
+
+                    // Removed Manual Check & Consumption
+                    // Networking will check if we have 40 stamina, then consume 40 stamina.
+
+                    world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                    player.teleport(anchor.x, anchor.y, anchor.z);
+                    player.fallDistance = 0;
+                    world.playSound(null, anchor.x, anchor.y, anchor.z, SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+
+                    return true;
+                }
             }
         });
     }
 
-    // --- VISUALS ---
-
     @Override
     public void onTick(PlayerEntity player) {
-        super.onTick(player); // Check awakening
+        super.onTick(player);
 
         if (player.getWorld().isClient) {
-            // Subtle mist dripping from player
             if (player.getRandom().nextFloat() < 0.1f) {
                 player.getWorld().addParticle(ParticleTypes.PORTAL,
                         player.getX() + (player.getRandom().nextDouble() - 0.5),
@@ -116,7 +149,6 @@ public class WarpGateQuirk extends Quirk {
     @Override
     public void onTickAwakened(PlayerEntity player) {
         if (player.getWorld().isClient) {
-            // Heavy mist aura
             for (int i = 0; i < 3; i++) {
                 player.getWorld().addParticle(ParticleTypes.SQUID_INK,
                         player.getX() + (player.getRandom().nextDouble() - 0.5) * 2,
