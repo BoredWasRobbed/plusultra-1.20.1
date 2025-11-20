@@ -24,10 +24,8 @@ public class PlusUltraClientNetworking {
         ClientPlayNetworking.registerGlobalReceiver(PlusUltraNetworking.OPEN_STEAL_SELECTION_PACKET, PlusUltraClientNetworking::handleOpenStealSelection);
     }
 
-    // ... existing handleSync ...
     private static void handleSync(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
-        int entityId = buf.readInt(); // Read Entity ID
-
+        int entityId = buf.readInt();
         boolean hasQuirk = buf.readBoolean();
         String quirkIdStr = hasQuirk ? buf.readString() : null;
         boolean isAwakened = buf.readBoolean();
@@ -52,7 +50,6 @@ public class PlusUltraClientNetworking {
         int placementState = buf.readInt();
         boolean regenActive = buf.readBoolean();
 
-        // AFO Data
         boolean isAFO = buf.readBoolean();
         int stolenCount = buf.readInt();
         String[] stolen = new String[stolenCount];
@@ -66,9 +63,16 @@ public class PlusUltraClientNetworking {
         boolean giveActive = buf.readBoolean();
         String quirkToGive = buf.readString();
 
+        // READ STATS
+        int statPoints = buf.readInt();
+        int str = buf.readInt();
+        int hp = buf.readInt();
+        int spd = buf.readInt();
+        int stam = buf.readInt();
+        int def = buf.readInt();
+
         client.execute(() -> {
             if (client.world == null) return;
-
             Entity entity = client.world.getEntityById(entityId);
             if (!(entity instanceof IQuirkData data)) return;
 
@@ -92,22 +96,25 @@ public class PlusUltraClientNetworking {
 
             data.setPlacementState(placementState, null, GameMode.SURVIVAL);
             data.setRegenActive(regenActive);
-
             data.setAllForOne(isAFO);
-
             data.getStolenQuirks().clear();
             for(String s : stolen) data.addStolenQuirk(s);
-
             data.getActivePassives().clear();
             for(String s : passives) data.togglePassive(s);
-
             data.setStealActive(stealActive);
             data.setGiveActive(giveActive);
             data.setQuirkToGive(quirkToGive);
+
+            // Set Stats
+            data.setStatPoints(statPoints);
+            data.setStrengthStat(str);
+            data.setHealthStat(hp);
+            data.setSpeedStat(spd);
+            data.setStaminaStat(stam);
+            data.setDefenseStat(def);
         });
     }
 
-    // NEW: Handle opening the Steal UI
     private static void handleOpenStealSelection(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         int targetId = buf.readInt();
         int count = buf.readInt();
@@ -115,7 +122,6 @@ public class PlusUltraClientNetworking {
         for (int i = 0; i < count; i++) {
             quirks.add(buf.readString());
         }
-
         client.execute(() -> {
             client.setScreen(new StealSelectionScreen(targetId, quirks));
         });

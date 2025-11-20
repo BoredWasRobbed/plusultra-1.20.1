@@ -2,8 +2,11 @@
   "quirk.plusultra.warp_gate": "Warp Gate",
   "quirk.plusultra.super_regeneration": "Super Regeneration",
   "quirk.plusultra.all_for_one": "All For One",
+  "quirk.plusultra.float": "Float",
+  "quirk.plusultra.attraction": "Attraction",
   "key.plusultra.activate": "Activate Quirk Ability",
   "key.plusultra.cycle": "Cycle Quirk Ability",
   "key.plusultra.wheel": "Quirk Selection",
+  "key.plusultra.stats": "Open Stat Menu",
   "category.plusultra": "Plus Ultra"
 }

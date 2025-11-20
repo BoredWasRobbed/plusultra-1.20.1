@@ -3,6 +3,7 @@ package net.bored;
 import net.bored.api.data.IQuirkData;
 import net.bored.client.gui.AllForOneRadialScreen;
 import net.bored.client.gui.QuirkHud;
+import net.bored.client.gui.StatScreen; // NEW IMPORT
 import net.bored.network.PlusUltraNetworking;
 import net.bored.network.PlusUltraClientNetworking;
 import net.fabricmc.api.ClientModInitializer;
@@ -25,6 +26,7 @@ public class PlusUltraClient implements ClientModInitializer {
 	public static KeyBinding activateKey;
 	public static KeyBinding cycleKey;
 	public static KeyBinding wheelKey;
+	public static KeyBinding statKey; // NEW KEY
 
 	@Override
 	public void onInitializeClient() {
@@ -55,13 +57,20 @@ public class PlusUltraClient implements ClientModInitializer {
 				"category.plusultra"
 		));
 
+		// Register Stat Menu Key
+		statKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+				"key.plusultra.stats",
+				InputUtil.Type.KEYSYM,
+				GLFW.GLFW_KEY_M,
+				"category.plusultra"
+		));
+
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (activateKey.wasPressed()) {
 				ClientPlayNetworking.send(PlusUltraNetworking.ACTIVATE_ABILITY_PACKET, PacketByteBufs.create());
 			}
 
 			while (wheelKey.wasPressed()) {
-				// UPDATED: Allow opening if player has ANY quirks in storage OR is AFO
 				if (client.player != null) {
 					IQuirkData data = (IQuirkData)client.player;
 					if (data.isAllForOne() || !data.getStolenQuirks().isEmpty()) {
@@ -69,9 +78,17 @@ public class PlusUltraClient implements ClientModInitializer {
 					}
 				}
 			}
+
+			// Handle Stat Menu Open
+			while (statKey.wasPressed()) {
+				if (client.player != null && client.currentScreen == null) {
+					client.setScreen(new StatScreen());
+				}
+			}
 		});
 	}
 
+	// ... existing onScroll ...
 	public static boolean onScroll(double horizontal, double vertical) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null) return false;

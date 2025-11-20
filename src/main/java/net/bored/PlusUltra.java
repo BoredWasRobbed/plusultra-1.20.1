@@ -5,6 +5,10 @@ import net.bored.api.quirk.Quirk;
 import net.bored.common.entity.VillainEntity;
 import net.bored.common.entity.WarpProjectileEntity;
 import net.bored.common.quirks.AllForOneQuirk;
+import net.bored.common.quirks.AttractionQuirk;
+import net.bored.common.quirks.FloatQuirk;
+import net.bored.common.quirks.SuperRegenerationQuirk;
+import net.bored.common.quirks.WarpGateQuirk;
 import net.bored.config.PlusUltraConfig;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -15,12 +19,9 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityDimensions;
 import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.SpawnGroup;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.particle.DustParticleEffect;
@@ -31,13 +32,9 @@ import net.minecraft.registry.Registry;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Hand;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.world.World;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.bored.registry.QuirkRegistry;
-import net.bored.common.quirks.WarpGateQuirk;
-import net.bored.common.quirks.SuperRegenerationQuirk;
 import net.bored.command.PlusUltraCommand;
 import net.bored.network.PlusUltraNetworking;
 import org.slf4j.Logger;
@@ -81,6 +78,10 @@ public class PlusUltra implements ModInitializer {
 		QuirkRegistry.register(new SuperRegenerationQuirk());
 		QuirkRegistry.register(new AllForOneQuirk());
 
+		// Updated Simple Quirks
+		QuirkRegistry.register(new FloatQuirk());
+		QuirkRegistry.register(new AttractionQuirk());
+
 		FabricDefaultAttributeRegistry.register(VILLAIN_ENTITY, VillainEntity.createVillainAttributes());
 
 		CommandRegistrationCallback.EVENT.register(PlusUltraCommand::register);
@@ -94,7 +95,7 @@ public class PlusUltra implements ModInitializer {
 			if (attacker.isStealActive()) {
 				if (entity instanceof IQuirkData target) {
 
-					// Cleaned up: Removed Slot Limit Logic
+					// Removed Slot Limit Check here as requested
 
 					List<String> stealable = new ArrayList<>();
 
