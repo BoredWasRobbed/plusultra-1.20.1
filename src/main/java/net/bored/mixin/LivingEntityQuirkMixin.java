@@ -48,7 +48,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
 
     @Unique private Identifier quirkId = null;
     @Unique private boolean isAwakened = false;
-    @Unique private boolean hasReceivedStarter = false; // NEW FIELD
+    @Unique private boolean hasReceivedStarter = false;
     @Unique private int selectedSlot = 0;
     @Unique private float stamina = 100.0f;
     @Unique private float maxStamina = 100.0f;
@@ -86,9 +86,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public Quirk getQuirk() { if (quirkId == null) return null; return QuirkRegistry.get(quirkId); }
 
     @Override public void setQuirk(Identifier id) {
-        // NEW: Check Config for disabled quirks
         if (id != null && PlusUltraConfig.get().isQuirkDisabled(id)) {
-            // If user tries to equip a disabled quirk, we deny it
             if ((Object)this instanceof PlayerEntity player) {
                 player.sendMessage(Text.literal("This quirk is disabled by the server.").formatted(Formatting.RED), true);
             }
@@ -107,7 +105,6 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
 
         String idStr = id.toString();
 
-        // Handle AFO Flag
         if (idStr.equals("plusultra:all_for_one")) {
             this.isAllForOne = true;
         }
@@ -127,23 +124,44 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public void setReceivedStarterQuirk(boolean received) { this.hasReceivedStarter = received; this.syncQuirkData(); }
 
     @Override public int getLevel() { return level; }
-    @Override public void setLevel(int level) { this.level = Math.max(1, level); this.syncQuirkData(); }
+    @Override public void setLevel(int level) {
+        this.level = Math.max(1, level);
+
+        // Scaling Max Stamina: Base 100 + (Level * 20).
+        // Level 1 = 120 Stamina. Level 50 = 1100 Stamina.
+        float newMax = 100.0f + (this.level * 20.0f);
+        this.setMaxStamina(newMax);
+
+        this.syncQuirkData();
+    }
+
     @Override public float getXp() { return xp; }
     @Override public void setXp(float xp) { this.xp = xp; checkLevelUp(); this.syncQuirkData(); }
     @Override public void addXp(float amount) { this.xp += amount; checkLevelUp(); this.syncQuirkData(); }
-    @Override public float getMaxXp() { return 100.0f + (this.level * 50.0f); }
+
+    @Override public float getMaxXp() {
+        // Exponential scaling: 100 * 1.1^(level-1)
+        return 100.0f * (float)Math.pow(1.1, this.level - 1);
+    }
+
     @Unique private void checkLevelUp() {
         float max = getMaxXp();
         while (this.xp >= max) {
             this.xp -= max;
             this.level++;
             max = getMaxXp();
+
+            // Apply Stat Scaling immediately (UPDATED to +20 per level)
+            float newMaxStamina = 100.0f + (this.level * 20.0f);
+            this.setMaxStamina(newMaxStamina);
+
             if (!this.getWorld().isClient && (Object)this instanceof PlayerEntity player) {
                 this.getWorld().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 1.0f, 1.0f);
                 player.sendMessage(Text.literal("Quirk Level Up! (" + this.level + ")").formatted(Formatting.GOLD, Formatting.BOLD), true);
             }
         }
     }
+
     @Override public int getSelectedSlot() { return selectedSlot; }
     @Override public void setSelectedSlot(int slot) { this.selectedSlot = slot; this.syncQuirkData(); }
     @Override public void cycleSlot(int direction) {
@@ -166,9 +184,28 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public float getMaxStamina() { return maxStamina; }
     @Override public void setStamina(float stamina) { this.stamina = MathHelper.clamp(stamina, 0, maxStamina); this.syncQuirkData(); }
     @Override public void setMaxStamina(float max) { this.maxStamina = Math.max(1.0f, max); if (this.stamina > this.maxStamina) this.stamina = this.maxStamina; this.syncQuirkData(); }
-    @Override public void consumeStamina(float amount) { this.stamina = MathHelper.clamp(this.stamina - amount, 0, maxStamina); this.syncQuirkData(); }
+
+    @Override public void consumeStamina(float amount) {
+        // Efficiency Scaling: 1% reduction per level, capped at 50%
+        float reduction = Math.min(0.5f, (this.level - 1) * 0.01f);
+        float finalAmount = amount * (1.0f - reduction);
+
+        this.stamina = MathHelper.clamp(this.stamina - finalAmount, 0, maxStamina);
+        this.syncQuirkData();
+    }
+
     @Override public int getCooldown(int slot) { if (slot >= 0 && slot < cooldowns.length) return cooldowns[slot]; return 0; }
-    @Override public void setCooldown(int slot, int ticks) { if (slot >= 0 && slot < cooldowns.length) { cooldowns[slot] = ticks; this.syncQuirkData(); } }
+
+    @Override public void setCooldown(int slot, int ticks) {
+        if (slot >= 0 && slot < cooldowns.length) {
+            // Cooldown Scaling: 1% reduction per level, capped at 50%
+            float reduction = Math.min(0.5f, (this.level - 1) * 0.01f);
+            int finalTicks = (int) (ticks * (1.0f - reduction));
+
+            cooldowns[slot] = finalTicks;
+            this.syncQuirkData();
+        }
+    }
     @Override public void tickCooldowns() { for (int i = 0; i < cooldowns.length; i++) { if (cooldowns[i] > 0) cooldowns[i]--; } }
 
     @Override public void addWarpAnchor(Vec3d pos, RegistryKey<World> dimension) {
@@ -234,7 +271,6 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         if (!stolenQuirks.contains(quirkId) && activePassives.contains(quirkId)) {
             activePassives.remove(quirkId);
             if ((Object)this instanceof PlayerEntity player) {
-                // UPDATED: Use display name
                 Quirk q = QuirkRegistry.get(new Identifier(quirkId));
                 Text name = q != null ? q.getName() : Text.literal(quirkId);
                 player.sendMessage(Text.literal("Passive disabled: ").append(name).append(" (Quirk lost)").formatted(Formatting.RED), true);
@@ -312,7 +348,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     private void writeQuirkData(NbtCompound nbt, CallbackInfo ci) {
         if (this.quirkId != null) nbt.putString("QuirkId", this.quirkId.toString());
         nbt.putBoolean("IsAwakened", this.isAwakened);
-        nbt.putBoolean("HasReceivedStarter", this.hasReceivedStarter); // NEW
+        nbt.putBoolean("HasReceivedStarter", this.hasReceivedStarter);
         nbt.putInt("SelectedSlot", this.selectedSlot);
         nbt.putFloat("Stamina", this.stamina);
         nbt.putFloat("MaxStamina", this.maxStamina);
@@ -347,7 +383,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         if (nbt.contains("QuirkId")) this.quirkId = new Identifier(nbt.getString("QuirkId"));
         else this.quirkId = null;
         this.isAwakened = nbt.getBoolean("IsAwakened");
-        this.hasReceivedStarter = nbt.getBoolean("HasReceivedStarter"); // NEW
+        this.hasReceivedStarter = nbt.getBoolean("HasReceivedStarter");
         this.selectedSlot = nbt.getInt("SelectedSlot");
         if (nbt.contains("Stamina")) this.stamina = nbt.getFloat("Stamina");
         if (nbt.contains("MaxStamina")) this.maxStamina = nbt.getFloat("MaxStamina");
@@ -383,6 +419,10 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         if (q != null && this.cooldowns.length != q.getAbilities().size()) {
             this.cooldowns = new int[q.getAbilities().size()];
         }
+
+        // Recalculate Max Stamina on Load to fix any desync
+        float newMax = 100.0f + (this.level * 20.0f);
+        this.setMaxStamina(newMax);
     }
 
     @Inject(method = "tick", at = @At("HEAD"))

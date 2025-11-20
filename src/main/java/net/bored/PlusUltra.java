@@ -1,7 +1,7 @@
 package net.bored;
 
 import net.bored.api.data.IQuirkData;
-import net.bored.api.quirk.Quirk; // Added Import
+import net.bored.api.quirk.Quirk;
 import net.bored.common.entity.VillainEntity;
 import net.bored.common.entity.WarpProjectileEntity;
 import net.bored.common.quirks.AllForOneQuirk;
@@ -94,10 +94,10 @@ public class PlusUltra implements ModInitializer {
 			if (attacker.isStealActive()) {
 				if (entity instanceof IQuirkData target) {
 
-					// Collect all potential quirks to steal
+					// Cleaned up: Removed Slot Limit Logic
+
 					List<String> stealable = new ArrayList<>();
 
-					// 1. If they have an equipped quirk, it's stealable
 					if (target.hasQuirk()) {
 						String activeId = target.getQuirk().getId().toString();
 						if (!activeId.equals("plusultra:all_for_one")) {
@@ -105,7 +105,6 @@ public class PlusUltra implements ModInitializer {
 						}
 					}
 
-					// 2. If they have quirks in storage (inventory)
 					for (String s : target.getStolenQuirks()) {
 						if (!stealable.contains(s) && !s.equals("plusultra:all_for_one")) {
 							stealable.add(s);
@@ -142,7 +141,6 @@ public class PlusUltra implements ModInitializer {
 						attacker.setGiveActive(false);
 						attacker.setQuirkToGive("");
 
-						// UPDATED: Use display name
 						Quirk q = QuirkRegistry.get(new Identifier(toGive));
 						Text quirkName = q != null ? q.getName() : Text.literal(toGive);
 						player.sendMessage(Text.literal("Granted: ").append(quirkName).formatted(Formatting.GOLD), true);
@@ -161,7 +159,6 @@ public class PlusUltra implements ModInitializer {
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
 			IQuirkData data = (IQuirkData) handler.player;
 
-			// NEW: Configurable Starter Quirk Logic
 			if (PlusUltraConfig.get().enableQuirkOnJoin && !data.hasReceivedStarterQuirk()) {
 				List<String> pool = PlusUltraConfig.get().starterQuirks;
 				if (pool != null && !pool.isEmpty()) {
@@ -172,10 +169,9 @@ public class PlusUltra implements ModInitializer {
 						Quirk q = QuirkRegistry.get(id);
 						if (q != null) {
 							data.setQuirk(id);
-							data.addStolenQuirk(randomId); // Add to inventory as well to be safe
+							data.addStolenQuirk(randomId);
 							data.setReceivedStarterQuirk(true);
 
-							// UPDATED: Use display name
 							handler.player.sendMessage(Text.literal("You have been born with: ").append(q.getName()).formatted(Formatting.GOLD, Formatting.BOLD), false);
 						}
 					} else {
@@ -198,7 +194,7 @@ public class PlusUltra implements ModInitializer {
 				newData.setStamina(oldData.getMaxStamina());
 				newData.setLevel(oldData.getLevel());
 				newData.setXp(oldData.getXp());
-				newData.setReceivedStarterQuirk(oldData.hasReceivedStarterQuirk()); // Copy starter status
+				newData.setReceivedStarterQuirk(oldData.hasReceivedStarterQuirk());
 
 				int anchorCount = oldData.getWarpAnchorCount();
 				for (int i = 0; i < anchorCount; i++) {

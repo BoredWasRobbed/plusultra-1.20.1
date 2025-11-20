@@ -50,7 +50,7 @@ public class WarpGateQuirk extends Quirk {
 
     @Override
     public void registerAbilities() {
-        // 1. Gate Anchor
+        // 1. Gate Anchor (Utility) - Now Level 1 (First Unlock)
         this.addAbility(new Ability("Gate Anchor", 20, 10, 1) {
             @Override public int getCost(LivingEntity user) { return user.isSneaking() ? 5 : 40; }
             @Override public boolean onActivate(World world, LivingEntity user) {
@@ -79,13 +79,13 @@ public class WarpGateQuirk extends Quirk {
             }
         });
 
-        // 2. Warp Mist
-        this.addAbility(new Ability("Warp Mist", 40, 25, 5) {
+        // 2. Warp Mist (Mobility) - Now Level 10 (Second Unlock)
+        this.addAbility(new Ability("Warp Mist", 40, 25, 10) {
             @Override public boolean onActivate(World world, LivingEntity user) {
                 if (world.isClient) return false;
                 double range = 20.0;
                 if (user instanceof IQuirkData data) {
-                    range += (data.getLevel() * 2.0);
+                    range += (data.getLevel() * 0.5);
                     if (data.isAwakened()) range = 60.0;
                 }
                 Vec3d start = user.getEyePos();
@@ -93,13 +93,6 @@ public class WarpGateQuirk extends Quirk {
                 Vec3d end = start.add(direction.multiply(range));
                 HitResult result = world.raycast(new RaycastContext(start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, user));
                 Vec3d targetPos = (result.getType() != HitResult.Type.MISS) ? result.getPos() : end;
-
-                BlockPos targetBlock = new BlockPos((int)targetPos.x, (int)targetPos.y, (int)targetPos.z);
-                // Simple ground check fallback
-                if (world.isAir(targetBlock) && world.isAir(targetBlock.down())) {
-                    // Basic logic: just try to go down until ground
-                    // (Simplified for brevity)
-                }
 
                 ServerWorld serverWorld = (ServerWorld) world;
                 serverWorld.spawnParticles(ParticleTypes.SQUID_INK, user.getX(), user.getY() + 1, user.getZ(), 20, 0.5, 1.0, 0.5, 0.1);
@@ -117,8 +110,33 @@ public class WarpGateQuirk extends Quirk {
             }
         });
 
-        // 3. Dimensional Rift
-        this.addAbility(new Ability("Dimensional Rift", 600, 50, 10) {
+        // 3. Warp Shot (Offense) - Now Level 25 (Third Unlock)
+        this.addAbility(new Ability("Warp Shot", 100, 30, 25) {
+            @Override
+            public boolean onActivate(World world, LivingEntity user) {
+                if (world.isClient || !(user instanceof IQuirkData data)) return false;
+
+                int index = data.getSelectedAnchorIndex();
+                Vec3d anchor = data.getWarpAnchorPos(index);
+                RegistryKey<World> dim = data.getWarpAnchorDim(index);
+
+                if (anchor == null || dim == null || !dim.equals(world.getRegistryKey())) {
+                    if (user instanceof PlayerEntity player) player.sendMessage(Text.literal("No Valid Anchor for Warp Shot!").formatted(Formatting.RED), true);
+                    return false;
+                }
+
+                WarpProjectileEntity projectile = new WarpProjectileEntity(world, user);
+                projectile.setVelocity(user, user.getPitch(), user.getYaw(), 0.0F, 2.5F, 1.0F);
+                projectile.setTargetAnchor(anchor);
+                world.spawnEntity(projectile);
+
+                world.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENTITY_GHAST_SHOOT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+                return true;
+            }
+        });
+
+        // 4. Dimensional Rift (Ultimate) - Level 40 (Final Unlock)
+        this.addAbility(new Ability("Dimensional Rift", 600, 50, 40) {
             @Override
             public boolean canUseWhileOnCooldown() { return true; }
 
@@ -126,10 +144,7 @@ public class WarpGateQuirk extends Quirk {
             public boolean onActivate(World world, LivingEntity user) {
                 if (world.isClient || !(user instanceof IQuirkData data)) return false;
 
-                // NOTE: Mobs cannot use the Spectator mode selection logic.
                 if (!(user instanceof ServerPlayerEntity serverPlayer)) {
-                    // AI LOGIC: Mobs just spawn a rift on their target if they have one?
-                    // For now, we disable this ability for non-players to prevent crashes.
                     return false;
                 }
 
@@ -183,33 +198,6 @@ public class WarpGateQuirk extends Quirk {
                 return false;
             }
         });
-
-        // 4. Warp Shot
-        this.addAbility(new Ability("Warp Shot", 100, 30, 5) {
-            @Override
-            public boolean onActivate(World world, LivingEntity user) {
-                if (world.isClient || !(user instanceof IQuirkData data)) return false;
-
-                // Mob Logic: if no anchor is set, maybe set one at current location automatically?
-                // For now, we enforce standard anchor logic. Mobs need to use "Gate Anchor" first.
-                int index = data.getSelectedAnchorIndex();
-                Vec3d anchor = data.getWarpAnchorPos(index);
-                RegistryKey<World> dim = data.getWarpAnchorDim(index);
-
-                if (anchor == null || dim == null || !dim.equals(world.getRegistryKey())) {
-                    if (user instanceof PlayerEntity player) player.sendMessage(Text.literal("No Valid Anchor for Warp Shot!").formatted(Formatting.RED), true);
-                    return false;
-                }
-
-                WarpProjectileEntity projectile = new WarpProjectileEntity(world, user);
-                projectile.setVelocity(user, user.getPitch(), user.getYaw(), 0.0F, 2.5F, 1.0F);
-                projectile.setTargetAnchor(anchor);
-                world.spawnEntity(projectile);
-
-                world.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENTITY_GHAST_SHOOT, SoundCategory.PLAYERS, 1.0f, 1.0f);
-                return true;
-            }
-        });
     }
 
     @Override
@@ -219,7 +207,6 @@ public class WarpGateQuirk extends Quirk {
         if (!user.getWorld().isClient && user instanceof IQuirkData data) {
             ServerWorld world = (ServerWorld) user.getWorld();
 
-            // Rift Cancellation Logic (Player only)
             int pState = data.getPlacementState();
             if (pState == 1 || pState == 2) {
                 if (data.getStamina() > 0) {
@@ -236,7 +223,6 @@ public class WarpGateQuirk extends Quirk {
                 }
             }
 
-            // Portal Particle/Tick Logic
             if (data.getPortalTimer() > 0) {
                 Vec3d origin = data.getPortalOrigin();
                 int index = data.getSelectedAnchorIndex();

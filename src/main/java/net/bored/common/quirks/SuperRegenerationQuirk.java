@@ -22,6 +22,7 @@ public class SuperRegenerationQuirk extends Quirk {
 
     @Override
     public void registerAbilities() {
+        // Ability 1: Toggle Regen - Level 1
         this.addAbility(new Ability("Toggle Regen", 20, 0, 1) {
             @Override
             public boolean grantsXpOnActivate() { return false; }
@@ -51,16 +52,26 @@ public class SuperRegenerationQuirk extends Quirk {
         if (user.getWorld().isClient || !(user instanceof IQuirkData data)) return;
 
         if (data.isRegenActive()) {
-            // Mobs might need faster ticks or different logic, but this works generally
             if (user.age % 10 == 0) {
                 if (user.getHealth() < user.getMaxHealth()) {
-                    float healCost = 5.0f;
+
+                    // NEW: Scaling Logic
+                    int level = data.getLevel();
+
+                    // Heal Amount: Base 1.0 + 0.1 per level.
+                    // Lvl 1 = 1.1 HP. Lvl 50 = 6.0 HP (3 Hearts).
+                    float healAmount = 1.0f + (level * 0.1f);
+
+                    // Cost: Base 5.0. Reduces slightly with level to represent efficiency.
+                    // Lvl 1 = 5.0. Lvl 50 = ~2.5.
+                    float healCost = Math.max(1.0f, 5.0f - (level * 0.05f));
 
                     if (data.getStamina() >= healCost) {
                         data.consumeStamina(healCost);
-                        user.heal(1.0f);
+                        user.heal(healAmount);
 
-                        data.addXp(2.0f);
+                        // XP Grant: Increased slightly for higher levels to keep pace
+                        data.addXp(2.0f + (level * 0.1f));
 
                         if (user.getWorld() instanceof ServerWorld serverWorld) {
                             serverWorld.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, user.getX(), user.getY() + 1, user.getZ(), 5, 0.3, 0.5, 0.3, 0.05);

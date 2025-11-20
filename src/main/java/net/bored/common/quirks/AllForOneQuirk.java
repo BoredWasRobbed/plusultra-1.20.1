@@ -20,14 +20,14 @@ public class AllForOneQuirk extends Quirk {
 
     @Override
     public void registerAbilities() {
-        // Ability 1: Forced Quirk Activation (Steal)
+        // Ability 1: Steal - Available at Level 1
         this.addAbility(new Ability("Steal", 100, 50, 1) {
             @Override
             public boolean onActivate(World world, LivingEntity user) {
                 if (world.isClient || !(user instanceof IQuirkData data)) return false;
 
                 data.setStealActive(true);
-                data.setGiveActive(false); // Mutually exclusive
+                data.setGiveActive(false);
 
                 if (user instanceof PlayerEntity player) {
                     player.sendMessage(Text.literal("Steal Ready: Hit a target to take their quirk.").formatted(Formatting.DARK_RED), true);
@@ -37,8 +37,8 @@ public class AllForOneQuirk extends Quirk {
             }
         });
 
-        // Ability 2: Bestowal (Give)
-        this.addAbility(new Ability("Give", 100, 50, 1) {
+        // Ability 2: Give - Available at Level 5 (Changed from 1)
+        this.addAbility(new Ability("Give", 100, 50, 5) {
             @Override
             public boolean onActivate(World world, LivingEntity user) {
                 if (world.isClient || !(user instanceof IQuirkData data)) return false;
@@ -62,6 +62,4 @@ public class AllForOneQuirk extends Quirk {
             }
         });
     }
-
-    // Note: No onTick needed here, passives are handled by the mixin iterating the active list.
 }
