@@ -39,28 +39,24 @@ public class PlusUltraNetworking {
                         return;
                     }
 
-                    // UPDATED: Allow execution if the ability specifically permits it during cooldown
                     boolean isOnCooldown = data.getCooldown(slot) > 0;
                     if (isOnCooldown && !ability.canUseWhileOnCooldown()) {
                         return;
                     }
 
-                    // If we are bypassing cooldown, we assume onActivate handles its own logic/costs for that state
-                    // otherwise we check stamina normally
                     float cost = ability.getCost(player);
 
-                    // If on cooldown (and allowed), we skip standard stamina check here and let the ability handle it,
-                    // OR we assume the alternate effect might be free (like closing a rift).
-                    // For safety, if NOT on cooldown, we enforce stamina.
                     if (!isOnCooldown && data.getStamina() < cost) return;
 
                     if (ability.onActivate(player.getWorld(), player)) {
-                        // Only apply standard costs if we weren't already on cooldown
-                        // (Prevents double dipping if the ability uses the bypass to just toggle something off)
                         if (!isOnCooldown) {
                             data.consumeStamina(cost);
                             data.setCooldown(slot, ability.getCooldown());
-                            data.addXp(5.0f);
+
+                            // Check the new flag before granting XP
+                            if (ability.grantsXpOnActivate()) {
+                                data.addXp(5.0f);
+                            }
                         }
                     }
                 }
@@ -76,11 +72,9 @@ public class PlusUltraNetworking {
             IQuirkData data = (IQuirkData) player;
 
             if (isSneaking) {
-                // Cycle Anchor
                 data.cycleSelectedAnchor(direction);
                 player.sendMessage(Text.literal("Anchor Selected: " + (data.getSelectedAnchorIndex() + 1) + "/" + data.getWarpAnchorCount()).formatted(Formatting.LIGHT_PURPLE), true);
             } else {
-                // Cycle Ability
                 data.cycleSlot(direction);
             }
         });

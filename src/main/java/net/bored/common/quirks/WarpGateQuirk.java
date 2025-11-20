@@ -116,7 +116,6 @@ public class WarpGateQuirk extends Quirk {
 
         // 3. Dimensional Rift
         this.addAbility(new Ability("Dimensional Rift", 600, 50, 10) {
-            // Allow activation during cooldown to CLOSE the rift
             @Override
             public boolean canUseWhileOnCooldown() {
                 return true;
@@ -127,19 +126,14 @@ public class WarpGateQuirk extends Quirk {
                 if (world.isClient || !(player instanceof IQuirkData data)) return false;
                 if (!(player instanceof ServerPlayerEntity serverPlayer)) return false;
 
-                // COOLDOWN CHECK / TOGGLE OFF LOGIC
-                // If the Rift is active (Timer > 0), we close it. This is allowed even if on cooldown.
                 if (data.getRiftTimer() > 0) {
                     data.setRift(null, null, 0);
                     player.sendMessage(Text.literal("Dimensional Rift Closed").formatted(Formatting.YELLOW), true);
-                    // Return false so we don't trigger the standard cost/cooldown reset logic in Networking
                     return false;
                 }
 
-                // If it wasn't active, we are trying to OPEN it.
-                // But wait! Since we bypassed the check in Networking, we must MANUALLY check if it's on cooldown here.
                 if (data.getCooldown(data.getSelectedSlot()) > 0) {
-                    return false; // It's on cooldown and we aren't closing it, so deny.
+                    return false;
                 }
 
                 int state = data.getPlacementState();
@@ -186,7 +180,7 @@ public class WarpGateQuirk extends Quirk {
             }
         });
 
-        // 4. Warp Shot (UPDATED: PROJECTILE)
+        // 4. Warp Shot
         this.addAbility(new Ability("Warp Shot", 100, 30, 5) {
             @Override
             public boolean onActivate(World world, PlayerEntity player) {
@@ -201,13 +195,11 @@ public class WarpGateQuirk extends Quirk {
                     return false;
                 }
 
-                // Spawn Projectile
                 WarpProjectileEntity projectile = new WarpProjectileEntity(world, player);
                 projectile.setVelocity(player, player.getPitch(), player.getYaw(), 0.0F, 2.5F, 1.0F);
                 projectile.setTargetAnchor(anchor);
                 world.spawnEntity(projectile);
 
-                // THROW SOUND: Ghast Shoot for "Beam/Shot" effect
                 world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_GHAST_SHOOT, SoundCategory.PLAYERS, 1.0f, 1.0f);
                 return true;
             }
@@ -248,17 +240,6 @@ public class WarpGateQuirk extends Quirk {
                     world.spawnParticles(ParticleTypes.PORTAL, target.x, target.y + 1, target.z, 25, 0.5, 1.0, 0.5, 0.1);
                     world.spawnParticles(ParticleTypes.SQUID_INK, target.x, target.y + 1, target.z, 5, 0.5, 1.0, 0.5, 0.05);
 
-                    if (data.getPortalImmunity() <= 0) {
-                        if (player.squaredDistanceTo(origin) < 2.0) {
-                            teleportEntity(player, target, world);
-                            data.setPortalImmunity(40);
-                        }
-                        else if (player.squaredDistanceTo(target.add(0, 1, 0)) < 2.0) {
-                            teleportEntity(player, origin, world);
-                            data.setPortalImmunity(40);
-                        }
-                    }
-
                     handleEntityTeleport(world, origin, target);
                     handleEntityTeleport(world, target.add(0, 1, 0), origin);
                 }
@@ -273,16 +254,6 @@ public class WarpGateQuirk extends Quirk {
                     world.spawnParticles(ParticleTypes.SQUID_INK, B.x, B.y + 1, B.z, 10, 0.5, 0.5, 0.5, 0.05);
                     world.spawnParticles(ParticleTypes.PORTAL, B.x, B.y + 1, B.z, 20, 0.3, 1.0, 0.3, 0.2);
 
-                    if (data.getPortalImmunity() <= 0) {
-                        if (player.squaredDistanceTo(A) < 3.0) {
-                            teleportEntity(player, B, world);
-                            data.setPortalImmunity(40);
-                        } else if (player.squaredDistanceTo(B) < 3.0) {
-                            teleportEntity(player, A, world);
-                            data.setPortalImmunity(40);
-                        }
-                    }
-
                     handleEntityTeleport(world, A, B);
                     handleEntityTeleport(world, B, A);
                 }
@@ -291,12 +262,19 @@ public class WarpGateQuirk extends Quirk {
     }
 
     private void handleEntityTeleport(ServerWorld world, Vec3d source, Vec3d dest) {
-        List<Entity> entities = world.getOtherEntities(null, new Box(source.add(-1, 0, -1), source.add(1, 2, 1)));
+        // UPDATED: Reduced Box size to 2x2 (Offsets of 1)
+        List<Entity> entities = world.getOtherEntities(null, new Box(source.add(-1, 0, -1), source.add(1, 3, 1)));
 
         for (Entity entity : entities) {
-            if (entity instanceof PlayerEntity) continue;
-
-            if (entity.getPortalCooldown() <= 0) {
+            // Use Custom Immunity for Players (avoids bouncing and cooldown issues)
+            if (entity instanceof IQuirkData data) {
+                if (data.getPortalImmunity() <= 0) {
+                    teleportEntity(entity, dest, world);
+                    data.setPortalImmunity(40);
+                }
+            }
+            // Use Vanilla Cooldown for mobs
+            else if (entity.getPortalCooldown() <= 0) {
                 teleportEntity(entity, dest, world);
                 entity.resetPortalCooldown();
                 entity.setPortalCooldown(100);

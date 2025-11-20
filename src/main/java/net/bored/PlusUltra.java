@@ -2,6 +2,7 @@ package net.bored;
 
 import net.bored.api.data.IQuirkData;
 import net.bored.common.entity.WarpProjectileEntity;
+import net.bored.common.quirks.SuperRegenerationQuirk;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -41,6 +42,7 @@ public class PlusUltra implements ModInitializer {
 		QuirkRegistry.init();
 
 		QuirkRegistry.register(new WarpGateQuirk());
+		QuirkRegistry.register(new SuperRegenerationQuirk());
 
 		CommandRegistrationCallback.EVENT.register(PlusUltraCommand::register);
 		PlusUltraNetworking.init();

@@ -59,7 +59,6 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Unique private int portalTimer = 0;
     @Unique private int portalImmunity = 0;
 
-    // NEW: Rift Data
     @Unique private int placementState = 0;
     @Unique private Vec3d placementOrigin = null;
     @Unique private GameMode originalGameMode = GameMode.SURVIVAL;
@@ -68,6 +67,9 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Unique private Vec3d riftA = null;
     @Unique private Vec3d riftB = null;
     @Unique private int riftTimer = 0;
+
+    // NEW: Regen Active State
+    @Unique private boolean regenActive = false;
 
     // --- INTERFACE IMPLEMENTATION ---
 
@@ -83,6 +85,8 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         this.portalImmunity = 0;
         this.riftTimer = 0;
         this.placementState = 0;
+        // Reset Regen
+        this.regenActive = false;
 
         this.anchorPositions.clear();
         this.anchorDimensions.clear();
@@ -143,16 +147,13 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Override public void setCooldown(int slot, int ticks) { if (slot >= 0 && slot < cooldowns.length) { cooldowns[slot] = ticks; this.syncQuirkData(); } }
     @Override public void tickCooldowns() { for (int i = 0; i < cooldowns.length; i++) { if (cooldowns[i] > 0) cooldowns[i]--; } }
 
-    // --- UPDATED ANCHOR LOGIC ---
     @Override public void addWarpAnchor(Vec3d pos, RegistryKey<World> dimension) {
         if (this.anchorPositions.size() >= 5) {
-            // If full, overwrite the CURRENTLY selected anchor instead of shifting the list
             if (this.selectedAnchorIndex >= 0 && this.selectedAnchorIndex < this.anchorPositions.size()) {
                 this.anchorPositions.set(this.selectedAnchorIndex, pos);
                 this.anchorDimensions.set(this.selectedAnchorIndex, dimension);
             }
         } else {
-            // If not full, add to the end and select it
             this.anchorPositions.add(pos);
             this.anchorDimensions.add(dimension);
             this.selectedAnchorIndex = this.anchorPositions.size() - 1;
@@ -173,7 +174,6 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Override public int getPortalImmunity() { return this.portalImmunity; }
     @Override public void setPortalImmunity(int ticks) { this.portalImmunity = ticks; }
 
-    // --- RIFT DATA (NEW) ---
     @Override public void setPlacementState(int state, Vec3d originalPos, GameMode originalMode) { this.placementState = state; this.placementOrigin = originalPos; this.originalGameMode = originalMode; this.syncQuirkData(); }
     @Override public int getPlacementState() { return this.placementState; }
     @Override public Vec3d getPlacementOrigin() { return this.placementOrigin; }
@@ -186,6 +186,10 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
     @Override public Vec3d getRiftB() { return this.riftB; }
     @Override public int getRiftTimer() { return this.riftTimer; }
     @Override public void tickRift() { if (this.riftTimer > 0) this.riftTimer--; }
+
+    // NEW IMPLEMENTATION
+    @Override public boolean isRegenActive() { return this.regenActive; }
+    @Override public void setRegenActive(boolean active) { this.regenActive = active; this.syncQuirkData(); }
 
     // --- SYNCING ---
     @Override public void syncQuirkData() {
@@ -205,7 +209,6 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         buf.writeInt(this.cooldowns.length);
         for (int cd : this.cooldowns) buf.writeInt(cd);
 
-        // Sync Anchors
         int count = anchorPositions.size();
         buf.writeInt(count);
         for (int i = 0; i < count; i++) {
@@ -214,9 +217,10 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
             buf.writeString(anchorDimensions.get(i).getValue().toString());
         }
         buf.writeInt(this.selectedAnchorIndex);
-
-        // Sync Placement State (for HUD/Controls)
         buf.writeInt(this.placementState);
+
+        // NEW: Sync Regen Active
+        buf.writeBoolean(this.regenActive);
 
         ServerPlayNetworking.send(player, PlusUltraNetworking.SYNC_DATA_PACKET, buf);
     }
@@ -231,6 +235,8 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         nbt.putIntArray("Cooldowns", this.cooldowns);
         nbt.putInt("QuirkLevel", this.level);
         nbt.putFloat("QuirkXp", this.xp);
+        // Save Regen
+        nbt.putBoolean("RegenActive", this.regenActive);
 
         NbtList anchorList = new NbtList();
         for (int i = 0; i < anchorPositions.size(); i++) {
@@ -255,6 +261,8 @@ public abstract class PlayerQuirkMixin extends LivingEntity implements IQuirkDat
         if (nbt.contains("Cooldowns")) this.cooldowns = nbt.getIntArray("Cooldowns");
         if (nbt.contains("QuirkLevel")) this.level = nbt.getInt("QuirkLevel");
         if (nbt.contains("QuirkXp")) this.xp = nbt.getFloat("QuirkXp");
+        // Read Regen
+        if (nbt.contains("RegenActive")) this.regenActive = nbt.getBoolean("RegenActive");
 
         this.anchorPositions.clear(); this.anchorDimensions.clear();
         if (nbt.contains("WarpAnchors")) {

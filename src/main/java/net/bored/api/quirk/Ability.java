@@ -27,6 +27,14 @@ public abstract class Ability {
         return false;
     }
 
+    /**
+     * If true, the player gains flat XP immediately upon activating this ability.
+     * Defaults to true. Set to false for toggles or passive enablers.
+     */
+    public boolean grantsXpOnActivate() {
+        return true;
+    }
+
     public int getCost(PlayerEntity player) {
         return this.staminaCost;
     }

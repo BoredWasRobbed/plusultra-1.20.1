@@ -59,20 +59,24 @@ public interface IQuirkData {
     int getPortalImmunity();
     void setPortalImmunity(int ticks);
 
-    // Dimensional Rift Data (Move 3 - NEW)
+    // Dimensional Rift Data (Move 3)
     void setPlacementState(int state, Vec3d originalPos, GameMode originalMode);
-    int getPlacementState(); // 0=None, 1=Select A, 2=Select B
+    int getPlacementState();
     Vec3d getPlacementOrigin();
     GameMode getOriginalGameMode();
 
-    void setTempRiftA(Vec3d pos); // Stores first click
+    void setTempRiftA(Vec3d pos);
     Vec3d getTempRiftA();
 
-    void setRift(Vec3d a, Vec3d b, int ticks); // Finalize rift
+    void setRift(Vec3d a, Vec3d b, int ticks);
     Vec3d getRiftA();
     Vec3d getRiftB();
     int getRiftTimer();
     void tickRift();
+
+    // --- NEW: Super Regeneration Data ---
+    boolean isRegenActive();
+    void setRegenActive(boolean active);
 
     // Sync
     void syncQuirkData();
