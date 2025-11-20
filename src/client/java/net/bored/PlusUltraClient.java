@@ -7,7 +7,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback; // Import HUD
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
@@ -22,13 +22,9 @@ public class PlusUltraClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		// 1. Register Networking
 		PlusUltraClientNetworking.init();
-
-		// 2. Register HUD (NEW)
 		HudRenderCallback.EVENT.register(new QuirkHud());
 
-		// 3. Register Keys
 		activateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 				"key.plusultra.activate",
 				InputUtil.Type.KEYSYM,
@@ -55,15 +51,14 @@ public class PlusUltraClient implements ClientModInitializer {
 		if (client.player == null) return false;
 
 		if (cycleKey.isPressed()) {
-			int direction = (vertical > 0) ? -1 : 1;
+			int direction = (vertical > 0) ? 1 : -1;
 
 			PacketByteBuf buf = PacketByteBufs.create();
 			buf.writeInt(direction);
+			// Send sneaking status to tell server if we are cycling Abilities or Anchors
+			buf.writeBoolean(client.player.isSneaking());
+
 			ClientPlayNetworking.send(PlusUltraNetworking.CYCLE_ABILITY_PACKET, buf);
-
-			// REMOVED: displaySelectedAbility(client, direction);
-			// The HUD now handles the visuals automatically!
-
 			return true;
 		}
 		return false;

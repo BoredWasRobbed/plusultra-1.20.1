@@ -9,6 +9,8 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 
 public class PlusUltraNetworking {
@@ -22,8 +24,6 @@ public class PlusUltraNetworking {
         ServerPlayNetworking.registerGlobalReceiver(CYCLE_ABILITY_PACKET, PlusUltraNetworking::handleCycle);
     }
 
-    // --- Server Handlers ---
-
     private static void handleActivate(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
@@ -34,23 +34,20 @@ public class PlusUltraNetworking {
                 Ability ability = quirk.getAbility(slot);
 
                 if (ability != null) {
-                    // 1. Check Cooldown
-                    if (data.getCooldown(slot) > 0) {
+                    if (data.getLevel() < ability.getRequiredLevel()) {
+                        player.sendMessage(Text.literal("Locked! Requires Level " + ability.getRequiredLevel()).formatted(Formatting.RED), true);
                         return;
                     }
 
-                    // 2. Check Stamina (Dynamic Cost)
-                    float cost = ability.getCost(player); // Changed to getCost(player)
+                    if (data.getCooldown(slot) > 0) return;
 
+                    float cost = ability.getCost(player);
                     if (data.getStamina() >= cost) {
                         if (ability.onActivate(player.getWorld(), player)) {
                             data.consumeStamina(cost);
-
-                            // 3. Set Cooldown
                             data.setCooldown(slot, ability.getCooldown());
+                            data.addXp(5.0f);
                         }
-                    } else {
-                        // Not enough stamina
                     }
                 }
             }
@@ -59,9 +56,19 @@ public class PlusUltraNetworking {
 
     private static void handleCycle(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         int direction = buf.readInt();
+        boolean isSneaking = buf.readBoolean(); // NEW
+
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
-            data.cycleSlot(direction);
+
+            if (isSneaking) {
+                // Cycle Anchor
+                data.cycleSelectedAnchor(direction);
+                player.sendMessage(Text.literal("Anchor Selected: " + (data.getSelectedAnchorIndex() + 1) + "/" + data.getWarpAnchorCount()).formatted(Formatting.LIGHT_PURPLE), true);
+            } else {
+                // Cycle Ability
+                data.cycleSlot(direction);
+            }
         });
     }
 }

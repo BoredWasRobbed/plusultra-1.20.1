@@ -2,6 +2,7 @@ package net.bored.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -27,111 +28,100 @@ public class PlusUltraCommand {
         dispatcher.register(CommandManager.literal("plusultra")
                 .requires(source -> source.hasPermissionLevel(2))
 
-                // --- QUIRK SUBCOMMAND ---
                 .then(CommandManager.literal("quirk")
                         .then(CommandManager.literal("set")
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
                                         .then(CommandManager.argument("quirk_id", IdentifierArgumentType.identifier())
                                                 .suggests(QUIRK_SUGGESTIONS)
-                                                .executes(PlusUltraCommand::setQuirk)
-                                        )
-                                )
-                        )
+                                                .executes(PlusUltraCommand::setQuirk))))
                         .then(CommandManager.literal("clear")
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
-                                        .executes(PlusUltraCommand::clearQuirk)
-                                )
-                        )
-                        .then(CommandManager.literal("list")
-                                .executes(PlusUltraCommand::listQuirks)
-                        )
+                                        .executes(PlusUltraCommand::clearQuirk)))
+                        .then(CommandManager.literal("list").executes(PlusUltraCommand::listQuirks))
                 )
 
-                // --- STAMINA SUBCOMMAND ---
                 .then(CommandManager.literal("stamina")
                         .then(CommandManager.literal("set")
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
                                         .then(CommandManager.argument("amount", FloatArgumentType.floatArg(0))
-                                                .executes(PlusUltraCommand::setStamina)
-                                        )
-                                )
-                        )
+                                                .executes(ctx -> setStamina(ctx, false)))))
                         .then(CommandManager.literal("max")
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
                                         .then(CommandManager.argument("amount", FloatArgumentType.floatArg(1))
-                                                .executes(PlusUltraCommand::setMaxStamina)
-                                        )
-                                )
-                        )
+                                                .executes(ctx -> setStamina(ctx, true)))))
+                )
+
+                // NEW: Leveling Commands
+                .then(CommandManager.literal("level")
+                        .then(CommandManager.literal("set")
+                                .then(CommandManager.argument("target", EntityArgumentType.players())
+                                        .then(CommandManager.argument("level", IntegerArgumentType.integer(1))
+                                                .executes(PlusUltraCommand::setLevel))))
+                )
+                .then(CommandManager.literal("xp")
+                        .then(CommandManager.literal("add")
+                                .then(CommandManager.argument("target", EntityArgumentType.players())
+                                        .then(CommandManager.argument("amount", FloatArgumentType.floatArg(1))
+                                                .executes(PlusUltraCommand::addXp))))
                 )
         );
     }
 
-    private static final SuggestionProvider<ServerCommandSource> QUIRK_SUGGESTIONS = (context, builder) -> {
-        return CommandSource.suggestIdentifiers(QuirkRegistry.QUIRK.getIds(), builder);
-    };
-
-    // --- Quirk Logic ---
+    private static final SuggestionProvider<ServerCommandSource> QUIRK_SUGGESTIONS = (context, builder) -> CommandSource.suggestIdentifiers(QuirkRegistry.QUIRK.getIds(), builder);
 
     private static int setQuirk(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
         Identifier quirkId = IdentifierArgumentType.getIdentifier(context, "quirk_id");
         Quirk quirk = QuirkRegistry.get(quirkId);
-
-        if (quirk == null) {
-            context.getSource().sendError(Text.literal("Quirk not found: " + quirkId));
-            return 0;
-        }
-
+        if (quirk == null) return 0;
         for (ServerPlayerEntity player : players) {
             IQuirkData data = (IQuirkData) player;
             data.setQuirk(quirkId);
             quirk.onEquip(player);
-            context.getSource().sendFeedback(() -> Text.literal("Set quirk for " + player.getName().getString() + " to " + quirkId).formatted(Formatting.GREEN), true);
+            context.getSource().sendFeedback(() -> Text.literal("Set quirk to " + quirkId).formatted(Formatting.GREEN), true);
         }
         return 1;
     }
 
     private static int clearQuirk(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
-        for (ServerPlayerEntity player : players) {
-            IQuirkData data = (IQuirkData) player;
-            data.setQuirk(null);
-            context.getSource().sendFeedback(() -> Text.literal("Cleared quirk for " + player.getName().getString()).formatted(Formatting.YELLOW), true);
+        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
+            ((IQuirkData) player).setQuirk(null);
+            context.getSource().sendFeedback(() -> Text.literal("Cleared quirk").formatted(Formatting.YELLOW), true);
         }
         return 1;
     }
 
     private static int listQuirks(CommandContext<ServerCommandSource> context) {
-        context.getSource().sendFeedback(() -> Text.literal("Registered Quirks:").formatted(Formatting.GOLD), false);
-        for (Identifier id : QuirkRegistry.QUIRK.getIds()) {
-            context.getSource().sendFeedback(() -> Text.literal("- " + id.toString()).formatted(Formatting.WHITE), false);
+        for (Identifier id : QuirkRegistry.QUIRK.getIds()) context.getSource().sendFeedback(() -> Text.literal("- " + id).formatted(Formatting.WHITE), false);
+        return 1;
+    }
+
+    private static int setStamina(CommandContext<ServerCommandSource> context, boolean isMax) throws CommandSyntaxException {
+        float amount = FloatArgumentType.getFloat(context, "amount");
+        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
+            IQuirkData data = (IQuirkData) player;
+            if (isMax) data.setMaxStamina(amount);
+            else data.setStamina(amount);
+            context.getSource().sendFeedback(() -> Text.literal("Set " + (isMax ? "MAX " : "") + "stamina to " + amount).formatted(Formatting.AQUA), true);
         }
         return 1;
     }
 
-    // --- Stamina Logic ---
-
-    private static int setStamina(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
-        float amount = FloatArgumentType.getFloat(context, "amount");
-
-        for (ServerPlayerEntity player : players) {
-            IQuirkData data = (IQuirkData) player;
-            data.setStamina(amount);
-            context.getSource().sendFeedback(() -> Text.literal("Set stamina for " + player.getName().getString() + " to " + amount).formatted(Formatting.AQUA), true);
+    // NEW
+    private static int setLevel(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        int level = IntegerArgumentType.getInteger(context, "level");
+        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
+            ((IQuirkData) player).setLevel(level);
+            context.getSource().sendFeedback(() -> Text.literal("Set Level to " + level).formatted(Formatting.GOLD), true);
         }
         return 1;
     }
 
-    private static int setMaxStamina(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
+    private static int addXp(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         float amount = FloatArgumentType.getFloat(context, "amount");
-
-        for (ServerPlayerEntity player : players) {
-            IQuirkData data = (IQuirkData) player;
-            data.setMaxStamina(amount);
-            context.getSource().sendFeedback(() -> Text.literal("Set MAX stamina for " + player.getName().getString() + " to " + amount).formatted(Formatting.AQUA), true);
+        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
+            ((IQuirkData) player).addXp(amount);
+            context.getSource().sendFeedback(() -> Text.literal("Added " + amount + " XP").formatted(Formatting.GREEN), true);
         }
         return 1;
     }
