@@ -4,6 +4,7 @@ import net.bored.PlusUltra;
 import net.bored.api.data.IQuirkData;
 import net.bored.api.quirk.Ability;
 import net.bored.api.quirk.Quirk;
+import net.bored.registry.QuirkRegistry; // Added Import
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -101,13 +102,17 @@ public class PlusUltraNetworking {
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
 
+            // HELPER: Get display name
+            Quirk q = QuirkRegistry.get(new Identifier(quirkId));
+            Text name = q != null ? q.getName() : Text.literal(quirkId);
+
             if (opCode == 0) {
                 boolean hasQuirk = data.getStolenQuirks().contains(quirkId);
                 boolean isAFOBase = quirkId.equals("plusultra:all_for_one") && data.isAllForOne();
 
                 if (hasQuirk || isAFOBase) {
                     data.setQuirk(new Identifier(quirkId));
-                    player.sendMessage(Text.literal("Equipped: " + quirkId).formatted(Formatting.GOLD), true);
+                    player.sendMessage(Text.literal("Equipped: ").append(name).formatted(Formatting.GOLD), true);
                 }
             } else if (opCode == 1) {
                 if (!data.isAllForOne()) {
@@ -117,7 +122,7 @@ public class PlusUltraNetworking {
                 if (data.getStolenQuirks().contains(quirkId)) {
                     data.togglePassive(quirkId);
                     boolean nowActive = data.getActivePassives().contains(quirkId);
-                    player.sendMessage(Text.literal("Passive " + (nowActive ? "ON" : "OFF") + ": " + quirkId).formatted(nowActive ? Formatting.GREEN : Formatting.RED), true);
+                    player.sendMessage(Text.literal("Passive " + (nowActive ? "ON" : "OFF") + ": ").append(name).formatted(nowActive ? Formatting.GREEN : Formatting.RED), true);
                 }
             } else if (opCode == 2) {
                 if (!data.isAllForOne()) {
@@ -126,7 +131,7 @@ public class PlusUltraNetworking {
                 }
                 if (data.getStolenQuirks().contains(quirkId)) {
                     data.setQuirkToGive(quirkId);
-                    player.sendMessage(Text.literal("Ready to Give: " + quirkId).formatted(Formatting.YELLOW), true);
+                    player.sendMessage(Text.literal("Ready to Give: ").append(name).formatted(Formatting.YELLOW), true);
                 }
             }
         });
@@ -165,7 +170,11 @@ public class PlusUltraNetworking {
                 }
 
                 attacker.setStealActive(false);
-                player.sendMessage(Text.literal("Stolen: " + quirkIdToSteal).formatted(Formatting.DARK_PURPLE, Formatting.BOLD), true);
+
+                // UPDATED: Use display name
+                Quirk q = QuirkRegistry.get(new Identifier(quirkIdToSteal));
+                Text name = q != null ? q.getName() : Text.literal(quirkIdToSteal);
+                player.sendMessage(Text.literal("Stolen: ").append(name).formatted(Formatting.DARK_PURPLE, Formatting.BOLD), true);
 
                 // Trigger Visuals
                 PlusUltra.spawnBlackLightning(player.getServerWorld(), player.getPos(), entity.getPos());

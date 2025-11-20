@@ -18,6 +18,10 @@ public interface IQuirkData {
     boolean isAwakened();
     void setAwakened(boolean awakened);
 
+    // Config / Progression Tracking
+    boolean hasReceivedStarterQuirk();
+    void setReceivedStarterQuirk(boolean received);
+
     // Leveling
     int getLevel();
     void setLevel(int level);

@@ -3,6 +3,7 @@ package net.bored.mixin;
 import net.bored.api.data.IQuirkData;
 import net.bored.api.quirk.Ability;
 import net.bored.api.quirk.Quirk;
+import net.bored.config.PlusUltraConfig;
 import net.bored.network.PlusUltraNetworking;
 import net.bored.registry.QuirkRegistry;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -47,6 +48,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
 
     @Unique private Identifier quirkId = null;
     @Unique private boolean isAwakened = false;
+    @Unique private boolean hasReceivedStarter = false; // NEW FIELD
     @Unique private int selectedSlot = 0;
     @Unique private float stamina = 100.0f;
     @Unique private float maxStamina = 100.0f;
@@ -84,6 +86,15 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public Quirk getQuirk() { if (quirkId == null) return null; return QuirkRegistry.get(quirkId); }
 
     @Override public void setQuirk(Identifier id) {
+        // NEW: Check Config for disabled quirks
+        if (id != null && PlusUltraConfig.get().isQuirkDisabled(id)) {
+            // If user tries to equip a disabled quirk, we deny it
+            if ((Object)this instanceof PlayerEntity player) {
+                player.sendMessage(Text.literal("This quirk is disabled by the server.").formatted(Formatting.RED), true);
+            }
+            return;
+        }
+
         if (id == null) {
             this.quirkId = null;
             this.cooldowns = new int[0];
@@ -111,6 +122,10 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public boolean hasQuirk() { return this.quirkId != null; }
     @Override public boolean isAwakened() { return this.isAwakened; }
     @Override public void setAwakened(boolean awakened) { this.isAwakened = awakened; this.syncQuirkData(); }
+
+    @Override public boolean hasReceivedStarterQuirk() { return hasReceivedStarter; }
+    @Override public void setReceivedStarterQuirk(boolean received) { this.hasReceivedStarter = received; this.syncQuirkData(); }
+
     @Override public int getLevel() { return level; }
     @Override public void setLevel(int level) { this.level = Math.max(1, level); this.syncQuirkData(); }
     @Override public float getXp() { return xp; }
@@ -206,8 +221,6 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public List<String> getStolenQuirks() { return stolenQuirks; }
 
     @Override public void addStolenQuirk(String quirkId) {
-        // Allow duplicates!
-        // We only prevent adding "All For One" recursively to avoid logical issues.
         if (quirkId.equals("plusultra:all_for_one") && stolenQuirks.contains(quirkId)) {
             return;
         }
@@ -218,11 +231,13 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public void removeStolenQuirk(String quirkId) {
         stolenQuirks.remove(quirkId);
 
-        // NEW: If we no longer have ANY copies of this quirk, forcibly disable its passive
         if (!stolenQuirks.contains(quirkId) && activePassives.contains(quirkId)) {
             activePassives.remove(quirkId);
             if ((Object)this instanceof PlayerEntity player) {
-                player.sendMessage(Text.literal("Passive disabled: " + quirkId + " (Quirk lost)").formatted(Formatting.RED), true);
+                // UPDATED: Use display name
+                Quirk q = QuirkRegistry.get(new Identifier(quirkId));
+                Text name = q != null ? q.getName() : Text.literal(quirkId);
+                player.sendMessage(Text.literal("Passive disabled: ").append(name).append(" (Quirk lost)").formatted(Formatting.RED), true);
             }
         }
 
@@ -297,6 +312,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     private void writeQuirkData(NbtCompound nbt, CallbackInfo ci) {
         if (this.quirkId != null) nbt.putString("QuirkId", this.quirkId.toString());
         nbt.putBoolean("IsAwakened", this.isAwakened);
+        nbt.putBoolean("HasReceivedStarter", this.hasReceivedStarter); // NEW
         nbt.putInt("SelectedSlot", this.selectedSlot);
         nbt.putFloat("Stamina", this.stamina);
         nbt.putFloat("MaxStamina", this.maxStamina);
@@ -331,6 +347,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         if (nbt.contains("QuirkId")) this.quirkId = new Identifier(nbt.getString("QuirkId"));
         else this.quirkId = null;
         this.isAwakened = nbt.getBoolean("IsAwakened");
+        this.hasReceivedStarter = nbt.getBoolean("HasReceivedStarter"); // NEW
         this.selectedSlot = nbt.getInt("SelectedSlot");
         if (nbt.contains("Stamina")) this.stamina = nbt.getFloat("Stamina");
         if (nbt.contains("MaxStamina")) this.maxStamina = nbt.getFloat("MaxStamina");

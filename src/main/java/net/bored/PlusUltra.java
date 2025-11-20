@@ -1,9 +1,11 @@
 package net.bored;
 
 import net.bored.api.data.IQuirkData;
+import net.bored.api.quirk.Quirk; // Added Import
 import net.bored.common.entity.VillainEntity;
 import net.bored.common.entity.WarpProjectileEntity;
 import net.bored.common.quirks.AllForOneQuirk;
+import net.bored.config.PlusUltraConfig;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -44,6 +46,7 @@ import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class PlusUltra implements ModInitializer {
 	public static final String MOD_ID = "plusultra";
@@ -70,6 +73,9 @@ public class PlusUltra implements ModInitializer {
 	public void onInitialize() {
 		LOGGER.info("Plus Ultra is initializing...");
 
+		// Init Config
+		PlusUltraConfig.get();
+
 		QuirkRegistry.init();
 		QuirkRegistry.register(new WarpGateQuirk());
 		QuirkRegistry.register(new SuperRegenerationQuirk());
@@ -85,7 +91,6 @@ public class PlusUltra implements ModInitializer {
 			if (world.isClient || hand != Hand.MAIN_HAND) return ActionResult.PASS;
 			if (!(player instanceof IQuirkData attacker) || !attacker.isAllForOne()) return ActionResult.PASS;
 
-			// NEW: Steal Logic opens GUI now
 			if (attacker.isStealActive()) {
 				if (entity instanceof IQuirkData target) {
 
@@ -95,7 +100,6 @@ public class PlusUltra implements ModInitializer {
 					// 1. If they have an equipped quirk, it's stealable
 					if (target.hasQuirk()) {
 						String activeId = target.getQuirk().getId().toString();
-						// Don't allow stealing AFO itself to prevent issues
 						if (!activeId.equals("plusultra:all_for_one")) {
 							stealable.add(activeId);
 						}
@@ -109,7 +113,6 @@ public class PlusUltra implements ModInitializer {
 					}
 
 					if (!stealable.isEmpty()) {
-						// Send packet to opener to open UI
 						if (player instanceof ServerPlayerEntity serverPlayer) {
 							PacketByteBuf buf = PacketByteBufs.create();
 							buf.writeInt(entity.getId()); // Target ID
@@ -125,7 +128,6 @@ public class PlusUltra implements ModInitializer {
 				}
 			}
 
-			// Existing Give Logic
 			if (attacker.isGiveActive()) {
 				if (entity instanceof IQuirkData target) {
 					String toGive = attacker.getQuirkToGive();
@@ -139,9 +141,12 @@ public class PlusUltra implements ModInitializer {
 						attacker.removeStolenQuirk(toGive);
 						attacker.setGiveActive(false);
 						attacker.setQuirkToGive("");
-						player.sendMessage(Text.literal("Granted: " + toGive).formatted(Formatting.GOLD), true);
 
-						// Visuals for giving too? Why not
+						// UPDATED: Use display name
+						Quirk q = QuirkRegistry.get(new Identifier(toGive));
+						Text quirkName = q != null ? q.getName() : Text.literal(toGive);
+						player.sendMessage(Text.literal("Granted: ").append(quirkName).formatted(Formatting.GOLD), true);
+
 						if (world instanceof ServerWorld sw) {
 							spawnBlackLightning(sw, player.getPos(), entity.getPos());
 						}
@@ -155,6 +160,30 @@ public class PlusUltra implements ModInitializer {
 
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
 			IQuirkData data = (IQuirkData) handler.player;
+
+			// NEW: Configurable Starter Quirk Logic
+			if (PlusUltraConfig.get().enableQuirkOnJoin && !data.hasReceivedStarterQuirk()) {
+				List<String> pool = PlusUltraConfig.get().starterQuirks;
+				if (pool != null && !pool.isEmpty()) {
+					String randomId = pool.get(new Random().nextInt(pool.size()));
+					Identifier id = Identifier.tryParse(randomId);
+
+					if (id != null) {
+						Quirk q = QuirkRegistry.get(id);
+						if (q != null) {
+							data.setQuirk(id);
+							data.addStolenQuirk(randomId); // Add to inventory as well to be safe
+							data.setReceivedStarterQuirk(true);
+
+							// UPDATED: Use display name
+							handler.player.sendMessage(Text.literal("You have been born with: ").append(q.getName()).formatted(Formatting.GOLD, Formatting.BOLD), false);
+						}
+					} else {
+						LOGGER.warn("Invalid quirk ID in starter config: " + randomId);
+					}
+				}
+			}
+
 			data.syncQuirkData();
 		});
 
@@ -169,6 +198,7 @@ public class PlusUltra implements ModInitializer {
 				newData.setStamina(oldData.getMaxStamina());
 				newData.setLevel(oldData.getLevel());
 				newData.setXp(oldData.getXp());
+				newData.setReceivedStarterQuirk(oldData.hasReceivedStarterQuirk()); // Copy starter status
 
 				int anchorCount = oldData.getWarpAnchorCount();
 				for (int i = 0; i < anchorCount; i++) {
@@ -194,26 +224,20 @@ public class PlusUltra implements ModInitializer {
 		LOGGER.info("Plus Ultra initialization complete.");
 	}
 
-	// Visual Effect Helper: "Black Lightning"
-	// Creates a jagged line of black dust particles between two points
 	public static void spawnBlackLightning(ServerWorld world, Vec3d start, Vec3d end) {
 		Vec3d direction = end.subtract(start);
 		double distance = direction.length();
 		direction = direction.normalize();
 
-		// Black dust
 		DustParticleEffect blackDust = new DustParticleEffect(new Vector3f(0.0f, 0.0f, 0.0f), 1.5f);
-		// Red accent (optional, for that AFO feel)
 		DustParticleEffect redDust = new DustParticleEffect(new Vector3f(0.6f, 0.0f, 0.0f), 1.0f);
 
-		int segments = (int) (distance * 2); // Particles per block roughly
+		int segments = (int) (distance * 2);
 
-		// Main Beam
 		for (int i = 0; i < segments; i++) {
 			double progress = i / (double) segments;
 			Vec3d pos = start.add(direction.multiply(progress * distance));
 
-			// Add jaggedness
 			double jitter = 0.3;
 			double jx = (world.random.nextDouble() - 0.5) * jitter;
 			double jy = (world.random.nextDouble() - 0.5) * jitter;
@@ -221,7 +245,6 @@ public class PlusUltra implements ModInitializer {
 
 			world.spawnParticles(blackDust, pos.x + jx, pos.y + 1.0 + jy, pos.z + jz, 1, 0, 0, 0, 0);
 
-			// Occasional red spark
 			if (world.random.nextFloat() < 0.3f) {
 				world.spawnParticles(redDust, pos.x + jx, pos.y + 1.0 + jy, pos.z + jz, 1, 0, 0, 0, 0);
 			}
