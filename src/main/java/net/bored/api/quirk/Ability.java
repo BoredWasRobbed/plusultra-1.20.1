@@ -1,6 +1,6 @@
 package net.bored.api.quirk;
 
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.world.World;
 
 public abstract class Ability {
@@ -17,25 +17,17 @@ public abstract class Ability {
         this.requiredLevel = requiredLevel;
     }
 
-    public abstract boolean onActivate(World world, PlayerEntity player);
+    public abstract boolean onActivate(World world, LivingEntity user);
 
-    /**
-     * If true, onActivate will be called even if the ability is on cooldown.
-     * Use this to handle secondary effects (like closing a rift) inside onActivate.
-     */
     public boolean canUseWhileOnCooldown() {
         return false;
     }
 
-    /**
-     * If true, the player gains flat XP immediately upon activating this ability.
-     * Defaults to true. Set to false for toggles or passive enablers.
-     */
     public boolean grantsXpOnActivate() {
         return true;
     }
 
-    public int getCost(PlayerEntity player) {
+    public int getCost(LivingEntity user) {
         return this.staminaCost;
     }
 

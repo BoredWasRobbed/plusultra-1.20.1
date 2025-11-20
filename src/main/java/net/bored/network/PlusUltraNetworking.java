@@ -53,7 +53,6 @@ public class PlusUltraNetworking {
                             data.consumeStamina(cost);
                             data.setCooldown(slot, ability.getCooldown());
 
-                            // Check the new flag before granting XP
                             if (ability.grantsXpOnActivate()) {
                                 data.addXp(5.0f);
                             }

@@ -1,6 +1,7 @@
 package net.bored.api.quirk;
 
 import net.bored.api.data.IQuirkData;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -14,68 +15,52 @@ public abstract class Quirk {
     private final List<Ability> abilities = new ArrayList<>();
     private final int iconColor;
 
-    // AWAKENING SYSTEM
-    private AwakeningCondition awakeningCondition = (player, data) -> false; // Default: Never awaken
+    private AwakeningCondition awakeningCondition = (user, data) -> false;
 
     public Quirk(Identifier id, int iconColor) {
         this.id = id;
         this.iconColor = iconColor;
         this.registerAbilities();
-        this.registerAwakening(); // New hook for subclasses
+        this.registerAwakening();
     }
 
     public abstract void registerAbilities();
 
-    /**
-     * Override this to set your awakening condition.
-     * Example: this.setAwakeningCondition((player, data) -> player.getHealth() < 5);
-     */
     public void registerAwakening() {
-        // Default implementation does nothing
     }
 
-    public void onTick(PlayerEntity player) {
-        if (player.getWorld().isClient) return;
+    public void onTick(LivingEntity user) {
+        if (user.getWorld().isClient) return;
 
-        // Check Awakening Logic
-        if (player instanceof IQuirkData data) {
-            // If not yet awakened, check condition
-            if (!data.isAwakened() && this.awakeningCondition.shouldAwaken(player, data)) {
+        if (user instanceof IQuirkData data) {
+            if (!data.isAwakened() && this.awakeningCondition.shouldAwaken(user, data)) {
                 data.setAwakened(true);
-                this.onAwaken(player);
+                this.onAwaken(user);
             }
 
-            // If awakened, run passive awakened effects
             if (data.isAwakened()) {
-                this.onTickAwakened(player);
+                this.onTickAwakened(user);
             }
         }
     }
 
-    /**
-     * Triggers once when the awakening happens.
-     */
-    public void onAwaken(PlayerEntity player) {
-        player.sendMessage(Text.literal("QUIRK AWAKENED!").formatted(Formatting.RED, Formatting.BOLD), true);
-        // Play sound or particle effects here
+    public void onAwaken(LivingEntity user) {
+        if (user instanceof PlayerEntity player) {
+            player.sendMessage(Text.literal("QUIRK AWAKENED!").formatted(Formatting.RED, Formatting.BOLD), true);
+        }
     }
 
-    /**
-     * Runs every tick ONLY if awakened.
-     */
-    public void onTickAwakened(PlayerEntity player) {
-        // Override for awakened passives
+    public void onTickAwakened(LivingEntity user) {
     }
 
-    public void onEquip(PlayerEntity player) {
-        player.sendMessage(Text.literal("You have obtained: ").append(this.getName()), true);
+    public void onEquip(LivingEntity user) {
+        if (user instanceof PlayerEntity player) {
+            player.sendMessage(Text.literal("You have obtained: ").append(this.getName()), true);
+        }
     }
 
-    public void onUnequip(PlayerEntity player) {
-        // Cleanup logic
+    public void onUnequip(LivingEntity user) {
     }
-
-    // --- Getters & Setters ---
 
     protected void setAwakeningCondition(AwakeningCondition condition) {
         this.awakeningCondition = condition;

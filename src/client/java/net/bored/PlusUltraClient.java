@@ -13,6 +13,7 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.entity.FlyingItemEntityRenderer;
+import net.minecraft.client.render.entity.ZombieEntityRenderer;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.network.PacketByteBuf;
 import org.lwjgl.glfw.GLFW;
@@ -29,6 +30,9 @@ public class PlusUltraClient implements ClientModInitializer {
 
 		// REGISTER RENDERER
 		EntityRendererRegistry.register(PlusUltra.WARP_PROJECTILE, FlyingItemEntityRenderer::new);
+
+		// Register Villain Renderer (Uses Zombie Renderer for now)
+		EntityRendererRegistry.register(PlusUltra.VILLAIN_ENTITY, ZombieEntityRenderer::new);
 
 		activateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 				"key.plusultra.activate",
