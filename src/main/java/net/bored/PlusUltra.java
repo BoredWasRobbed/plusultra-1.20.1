@@ -8,7 +8,9 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
 import net.minecraft.entity.Entity;
@@ -17,6 +19,11 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.particle.DustParticleEffect;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.ActionResult;
@@ -33,7 +40,9 @@ import net.bored.command.PlusUltraCommand;
 import net.bored.network.PlusUltraNetworking;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class PlusUltra implements ModInitializer {
@@ -76,51 +85,66 @@ public class PlusUltra implements ModInitializer {
 			if (world.isClient || hand != Hand.MAIN_HAND) return ActionResult.PASS;
 			if (!(player instanceof IQuirkData attacker) || !attacker.isAllForOne()) return ActionResult.PASS;
 
+			// NEW: Steal Logic opens GUI now
 			if (attacker.isStealActive()) {
-				if (entity instanceof IQuirkData target && target.hasQuirk()) {
-					String stolenId = target.getQuirk().getId().toString();
-					attacker.addStolenQuirk(stolenId);
+				if (entity instanceof IQuirkData target) {
 
-					// Remove from target's storage AND unequip
-					target.removeStolenQuirk(stolenId);
-					target.setQuirk(null);
+					// Collect all potential quirks to steal
+					List<String> stealable = new ArrayList<>();
 
-					// UPDATED: Auto-swap to another quirk if available
-					List<String> remaining = target.getStolenQuirks();
-					if (!remaining.isEmpty()) {
-						// Pick the first one available in inventory
-						// If duplicates exist, this will just re-equip the same type, which is correct behavior.
-						String nextQuirkId = remaining.get(0);
-						target.setQuirk(new Identifier(nextQuirkId));
-
-						if (entity instanceof PlayerEntity targetPlayer) {
-							targetPlayer.sendMessage(Text.literal("Auto-equipped fallback: " + nextQuirkId).formatted(Formatting.GRAY), true);
+					// 1. If they have an equipped quirk, it's stealable
+					if (target.hasQuirk()) {
+						String activeId = target.getQuirk().getId().toString();
+						// Don't allow stealing AFO itself to prevent issues
+						if (!activeId.equals("plusultra:all_for_one")) {
+							stealable.add(activeId);
 						}
 					}
 
-					attacker.setStealActive(false);
-					player.sendMessage(Text.literal("Stolen: " + stolenId).formatted(Formatting.DARK_PURPLE), true);
-					return ActionResult.SUCCESS;
+					// 2. If they have quirks in storage (inventory)
+					for (String s : target.getStolenQuirks()) {
+						if (!stealable.contains(s) && !s.equals("plusultra:all_for_one")) {
+							stealable.add(s);
+						}
+					}
+
+					if (!stealable.isEmpty()) {
+						// Send packet to opener to open UI
+						if (player instanceof ServerPlayerEntity serverPlayer) {
+							PacketByteBuf buf = PacketByteBufs.create();
+							buf.writeInt(entity.getId()); // Target ID
+							buf.writeInt(stealable.size());
+							for(String s : stealable) buf.writeString(s);
+
+							ServerPlayNetworking.send(serverPlayer, PlusUltraNetworking.OPEN_STEAL_SELECTION_PACKET, buf);
+						}
+						return ActionResult.SUCCESS;
+					} else {
+						player.sendMessage(Text.literal("Target has no quirks to steal.").formatted(Formatting.RED), true);
+					}
 				}
 			}
 
+			// Existing Give Logic
 			if (attacker.isGiveActive()) {
 				if (entity instanceof IQuirkData target) {
 					String toGive = attacker.getQuirkToGive();
 					if (toGive != null && !toGive.isEmpty()) {
-						// Give to Inventory
 						target.addStolenQuirk(toGive);
 
-						// If target has NO active quirk, equip this one automatically
 						if (!target.hasQuirk()) {
 							target.setQuirk(new Identifier(toGive));
 						}
 
 						attacker.removeStolenQuirk(toGive);
-
 						attacker.setGiveActive(false);
 						attacker.setQuirkToGive("");
 						player.sendMessage(Text.literal("Granted: " + toGive).formatted(Formatting.GOLD), true);
+
+						// Visuals for giving too? Why not
+						if (world instanceof ServerWorld sw) {
+							spawnBlackLightning(sw, player.getPos(), entity.getPos());
+						}
 						return ActionResult.SUCCESS;
 					}
 				}
@@ -154,11 +178,9 @@ public class PlusUltra implements ModInitializer {
 				}
 				if (oldData.isRegenActive()) newData.setRegenActive(true);
 
-				// Copy AFO
 				if (oldData.isAllForOne()) {
 					newData.setAllForOne(true);
 				}
-				// Copy Inventory & Passives (For EVERYONE, not just AFO users)
 				for(String s : oldData.getStolenQuirks()) newData.addStolenQuirk(s);
 				for(String s : oldData.getActivePassives()) newData.togglePassive(s);
 			}
@@ -170,5 +192,39 @@ public class PlusUltra implements ModInitializer {
 		});
 
 		LOGGER.info("Plus Ultra initialization complete.");
+	}
+
+	// Visual Effect Helper: "Black Lightning"
+	// Creates a jagged line of black dust particles between two points
+	public static void spawnBlackLightning(ServerWorld world, Vec3d start, Vec3d end) {
+		Vec3d direction = end.subtract(start);
+		double distance = direction.length();
+		direction = direction.normalize();
+
+		// Black dust
+		DustParticleEffect blackDust = new DustParticleEffect(new Vector3f(0.0f, 0.0f, 0.0f), 1.5f);
+		// Red accent (optional, for that AFO feel)
+		DustParticleEffect redDust = new DustParticleEffect(new Vector3f(0.6f, 0.0f, 0.0f), 1.0f);
+
+		int segments = (int) (distance * 2); // Particles per block roughly
+
+		// Main Beam
+		for (int i = 0; i < segments; i++) {
+			double progress = i / (double) segments;
+			Vec3d pos = start.add(direction.multiply(progress * distance));
+
+			// Add jaggedness
+			double jitter = 0.3;
+			double jx = (world.random.nextDouble() - 0.5) * jitter;
+			double jy = (world.random.nextDouble() - 0.5) * jitter;
+			double jz = (world.random.nextDouble() - 0.5) * jitter;
+
+			world.spawnParticles(blackDust, pos.x + jx, pos.y + 1.0 + jy, pos.z + jz, 1, 0, 0, 0, 0);
+
+			// Occasional red spark
+			if (world.random.nextFloat() < 0.3f) {
+				world.spawnParticles(redDust, pos.x + jx, pos.y + 1.0 + jy, pos.z + jz, 1, 0, 0, 0, 0);
+			}
+		}
 	}
 }

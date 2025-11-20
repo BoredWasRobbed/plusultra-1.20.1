@@ -1,6 +1,7 @@
 package net.bored.network;
 
 import net.bored.api.data.IQuirkData;
+import net.bored.client.gui.StealSelectionScreen;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.minecraft.client.MinecraftClient;
@@ -13,12 +14,17 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.GameMode;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class PlusUltraClientNetworking {
 
     public static void init() {
         ClientPlayNetworking.registerGlobalReceiver(PlusUltraNetworking.SYNC_DATA_PACKET, PlusUltraClientNetworking::handleSync);
+        ClientPlayNetworking.registerGlobalReceiver(PlusUltraNetworking.OPEN_STEAL_SELECTION_PACKET, PlusUltraClientNetworking::handleOpenStealSelection);
     }
 
+    // ... existing handleSync ...
     private static void handleSync(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         int entityId = buf.readInt(); // Read Entity ID
 
@@ -64,7 +70,7 @@ public class PlusUltraClientNetworking {
             if (client.world == null) return;
 
             Entity entity = client.world.getEntityById(entityId);
-            if (!(entity instanceof IQuirkData data)) return; // Works for Player AND Mobs now
+            if (!(entity instanceof IQuirkData data)) return;
 
             if (hasQuirk) data.setQuirk(new Identifier(quirkIdStr));
             else data.setQuirk(null);
@@ -98,6 +104,20 @@ public class PlusUltraClientNetworking {
             data.setStealActive(stealActive);
             data.setGiveActive(giveActive);
             data.setQuirkToGive(quirkToGive);
+        });
+    }
+
+    // NEW: Handle opening the Steal UI
+    private static void handleOpenStealSelection(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
+        int targetId = buf.readInt();
+        int count = buf.readInt();
+        List<String> quirks = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            quirks.add(buf.readString());
+        }
+
+        client.execute(() -> {
+            client.setScreen(new StealSelectionScreen(targetId, quirks));
         });
     }
 }
