@@ -88,11 +88,8 @@ public class PlusUltraNetworking {
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
 
-            // FIXED: Removed check for data.isAllForOne().
-            // Now regular players with multiple quirks can switch too.
-
             if (opCode == 0) {
-                // Equip Logic
+                // Equip Logic - Allowed for anyone with storage to switch between their own quirks
                 boolean hasQuirk = data.getStolenQuirks().contains(quirkId);
                 boolean isAFOBase = quirkId.equals("plusultra:all_for_one") && data.isAllForOne();
 
@@ -101,14 +98,22 @@ public class PlusUltraNetworking {
                     player.sendMessage(Text.literal("Equipped: " + quirkId).formatted(Formatting.GOLD), true);
                 }
             } else if (opCode == 1) {
-                // Toggle Passive
+                // Toggle Passive - RESTRICTED TO AFO
+                if (!data.isAllForOne()) {
+                    player.sendMessage(Text.literal("Only All For One can toggle multiple passives!").formatted(Formatting.RED), true);
+                    return;
+                }
                 if (data.getStolenQuirks().contains(quirkId)) {
                     data.togglePassive(quirkId);
                     boolean nowActive = data.getActivePassives().contains(quirkId);
                     player.sendMessage(Text.literal("Passive " + (nowActive ? "ON" : "OFF") + ": " + quirkId).formatted(nowActive ? Formatting.GREEN : Formatting.RED), true);
                 }
             } else if (opCode == 2) {
-                // Select for Give - Only AFO users can use the 'Give' ability, but setting the target is harmless
+                // Select for Give - RESTRICTED TO AFO
+                if (!data.isAllForOne()) {
+                    player.sendMessage(Text.literal("Only All For One can give quirks!").formatted(Formatting.RED), true);
+                    return;
+                }
                 if (data.getStolenQuirks().contains(quirkId)) {
                     data.setQuirkToGive(quirkId);
                     player.sendMessage(Text.literal("Ready to Give: " + quirkId).formatted(Formatting.YELLOW), true);

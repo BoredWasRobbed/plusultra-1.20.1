@@ -28,7 +28,7 @@ public class AllForOneRadialScreen extends Screen {
     private List<String> getDisplayQuirks() {
         List<String> quirks = new ArrayList<>();
 
-        // FIXED: Only add AFO if the player is actually an AFO user
+        // Only add AFO if the player is actually an AFO user
         if (data.isAllForOne()) {
             quirks.add("plusultra:all_for_one");
         }
@@ -83,6 +83,13 @@ public class AllForOneRadialScreen extends Screen {
             }
 
             String fullText = prefix + displayName;
+
+            // NEW: Display Count if we have multiple copies
+            long count = data.getStolenQuirks().stream().filter(s -> s.equals(qId)).count();
+            if (count > 1) {
+                fullText += " x" + count;
+            }
+
             int textWidth = this.textRenderer.getWidth(fullText);
             int x = centerX - (textWidth / 2);
 
@@ -116,6 +123,13 @@ public class AllForOneRadialScreen extends Screen {
             if (qId.equals(data.getQuirkToGive())) prefix += "{GIVE READY} ";
 
             String fullText = prefix + displayName;
+
+            // Match the text width calculation from render() to ensure accurate hitboxes
+            long count = data.getStolenQuirks().stream().filter(s -> s.equals(qId)).count();
+            if (count > 1) {
+                fullText += " x" + count;
+            }
+
             int textWidth = this.textRenderer.getWidth(fullText);
             int x = centerX - (textWidth / 2);
 

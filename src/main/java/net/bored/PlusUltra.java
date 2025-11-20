@@ -78,7 +78,10 @@ public class PlusUltra implements ModInitializer {
 				if (entity instanceof IQuirkData target && target.hasQuirk()) {
 					String stolenId = target.getQuirk().getId().toString();
 					attacker.addStolenQuirk(stolenId);
-					target.setQuirk(null); // Steal it
+
+					// FIXED: Remove from target's storage AND unequip
+					target.removeStolenQuirk(stolenId);
+					target.setQuirk(null);
 
 					attacker.setStealActive(false);
 					player.sendMessage(Text.literal("Stolen: " + stolenId).formatted(Formatting.DARK_PURPLE), true);

@@ -22,6 +22,7 @@ import net.minecraft.world.ServerWorldAccess;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -66,9 +67,11 @@ public class VillainEntity extends ZombieEntity {
                 quirkData.addWarpAnchor(this.getPos(), world.toServerWorld().getRegistryKey());
             }
             else if (this.random.nextBoolean()) {
+                quirkData.addStolenQuirk("plusultra:super_regeneration"); // Add to storage so we don't lose it on switch
                 quirkData.setQuirk(new Identifier("plusultra", "super_regeneration"));
                 quirkData.setRegenActive(true);
             } else {
+                quirkData.addStolenQuirk("plusultra:warp_gate"); // Add to storage
                 quirkData.setQuirk(new Identifier("plusultra", "warp_gate"));
                 quirkData.addWarpAnchor(this.getPos(), world.toServerWorld().getRegistryKey());
             }
@@ -133,7 +136,11 @@ public class VillainEntity extends ZombieEntity {
 
                 // If current quirk didn't fire, try switching to another one in storage
                 if (globalCooldown <= 0) {
-                    for (String quirkId : data.getStolenQuirks()) {
+                    // FIXED: Create a copy of the list to avoid ConcurrentModificationException
+                    // if setQuirk modifies the list (impl detail) or threading issues.
+                    List<String> quirksToCheck = new ArrayList<>(data.getStolenQuirks());
+
+                    for (String quirkId : quirksToCheck) {
                         // Skip if already active
                         if (data.getQuirk() != null && data.getQuirk().getId().toString().equals(quirkId)) continue;
 
@@ -153,6 +160,8 @@ public class VillainEntity extends ZombieEntity {
         }
 
         private boolean tryUseQuirk(IQuirkData data, Quirk quirk, LivingEntity target) {
+            if (quirk == null) return false;
+
             if (quirk instanceof WarpGateQuirk) {
                 double distSq = this.mob.squaredDistanceTo(target);
                 // Warp Shot Range

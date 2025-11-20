@@ -101,9 +101,6 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
             this.isAllForOne = true;
         }
 
-        // Auto-Learn: Add to inventory
-        addStolenQuirk(idStr);
-
         Quirk q = getQuirk();
         if (q != null) this.cooldowns = new int[q.getAbilities().size()];
         else this.cooldowns = new int[0];
@@ -209,9 +206,8 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public List<String> getStolenQuirks() { return stolenQuirks; }
 
     @Override public void addStolenQuirk(String quirkId) {
-        // FIXED: Prevent "All For One" from being added if it's already there
-        // Other quirks can be added as duplicates if desired (e.g., 2x Warp Gate),
-        // but AFO should be unique to prevent logic issues.
+        // Allow duplicates!
+        // We only prevent adding "All For One" recursively to avoid logical issues.
         if (quirkId.equals("plusultra:all_for_one") && stolenQuirks.contains(quirkId)) {
             return;
         }
@@ -221,6 +217,15 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
 
     @Override public void removeStolenQuirk(String quirkId) {
         stolenQuirks.remove(quirkId);
+
+        // NEW: If we no longer have ANY copies of this quirk, forcibly disable its passive
+        if (!stolenQuirks.contains(quirkId) && activePassives.contains(quirkId)) {
+            activePassives.remove(quirkId);
+            if ((Object)this instanceof PlayerEntity player) {
+                player.sendMessage(Text.literal("Passive disabled: " + quirkId + " (Quirk lost)").formatted(Formatting.RED), true);
+            }
+        }
+
         this.syncQuirkData();
     }
 
