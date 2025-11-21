@@ -99,7 +99,7 @@ public class PlusUltraCommand {
             // 3. Set Active Quirk (Overwrites active slot)
             data.setQuirk(quirkId);
             quirk.onEquip(player);
-            player.sendMessage(Text.literal("Your quirk has been set to " + quirk.getName().getString()).formatted(Formatting.GREEN), false);
+            player.sendMessage(Text.literal("Your quirk has been set to ").append(quirk.getName()).formatted(Formatting.GREEN), false);
         }
         context.getSource().sendFeedback(() -> Text.literal("Set quirk (and wiped storage/AFO) for " + players.size() + " players").formatted(Formatting.GREEN), true);
         return 1;
@@ -111,7 +111,8 @@ public class PlusUltraCommand {
         Identifier quirkId = IdentifierArgumentType.getIdentifier(context, "quirk_id");
 
         // Validate quirk exists
-        if (QuirkRegistry.get(quirkId) == null) return 0;
+        Quirk quirk = QuirkRegistry.get(quirkId);
+        if (quirk == null) return 0;
 
         String idString = quirkId.toString();
 
@@ -134,7 +135,8 @@ public class PlusUltraCommand {
 
             if (!isActive && !isStored) {
                 data.addStolenQuirk(idString);
-                player.sendMessage(Text.literal("Added quirk to storage: " + quirkId).formatted(Formatting.AQUA), false);
+                // UPDATED: Use Formal Name instead of ID
+                player.sendMessage(Text.literal("Added quirk to storage: ").append(quirk.getName()).formatted(Formatting.AQUA), false);
             }
         }
         context.getSource().sendFeedback(() -> Text.literal("Added quirk to storage for " + players.size() + " players").formatted(Formatting.AQUA), true);
@@ -155,7 +157,13 @@ public class PlusUltraCommand {
     }
 
     private static int listQuirks(CommandContext<ServerCommandSource> context) {
-        for (Identifier id : QuirkRegistry.QUIRK.getIds()) context.getSource().sendFeedback(() -> Text.literal("- " + id).formatted(Formatting.WHITE), false);
+        // UPDATED: List now shows formal names
+        for (Identifier id : QuirkRegistry.QUIRK.getIds()) {
+            Quirk q = QuirkRegistry.get(id);
+            if (q != null) {
+                context.getSource().sendFeedback(() -> Text.literal("- ").append(q.getName()).formatted(Formatting.WHITE), false);
+            }
+        }
         return 1;
     }
 
