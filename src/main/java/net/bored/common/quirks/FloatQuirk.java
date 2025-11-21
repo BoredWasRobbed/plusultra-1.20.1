@@ -23,6 +23,12 @@ public class FloatQuirk extends Quirk {
     }
 
     @Override
+    public void registerAwakening() {
+        // Simple Condition: Reach Level 30 to unlock Flight Control
+        this.setAwakeningCondition((user, data) -> data.getLevel() >= 30);
+    }
+
+    @Override
     public void registerAbilities() {
         // Ability 1: Levitate (Toggle) - Level 1
         this.addAbility(new Ability("Levitate", 20, 0, 1) {
@@ -38,10 +44,10 @@ public class FloatQuirk extends Quirk {
 
                 if (newState) {
                     if(user instanceof PlayerEntity p) p.sendMessage(Text.literal("Levitation Active").formatted(Formatting.AQUA), true);
-                    // Lower volume, higher pitch
                     world.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENTITY_PHANTOM_FLAP, SoundCategory.PLAYERS, 0.5f, 2.0f);
                 } else {
                     if(user instanceof PlayerEntity p) p.sendMessage(Text.literal("Levitation Inactive").formatted(Formatting.GRAY), true);
+                    user.setNoGravity(false);
                 }
                 return true;
             }
@@ -51,59 +57,90 @@ public class FloatQuirk extends Quirk {
     @Override
     public void onTick(LivingEntity user) {
         super.onTick(user);
-        if (user.getWorld().isClient || !(user instanceof IQuirkData data)) return;
+        // Removed "user.getWorld().isClient" check here to allow Client-Side prediction
+        if (!(user instanceof IQuirkData data)) return;
 
         if (data.isRegenActive()) {
             float cost = Math.max(0.2f, 0.5f - (data.getLevel() * 0.005f));
 
+            // Check stamina (Client predicts, Server enforces)
             if (data.getStamina() >= cost) {
-                data.consumeStamina(cost);
 
-                user.fallDistance = 0;
+                // --- SERVER SIDE: State & Resources ---
+                if (!user.getWorld().isClient) {
+                    data.consumeStamina(cost);
+                    if (user.age % 60 == 0) data.addXp(0.5f);
 
-                // Get current velocity
-                Vec3d velocity = user.getVelocity();
-
-                // Calculate Y velocity: Lock it to 0 unless input given
-                double yVel = 0.0;
-
-                // Use Accessor for jumping check
-                boolean isJumping = ((LivingEntityAccessor)user).isJumping();
-
-                if (user.isSneaking()) {
-                    yVel = -0.2; // Descent speed
-                } else if (isJumping) {
-                    yVel = 0.2; // Ascent speed
-                } else {
-                    // Counteract gravity completely to hover in place
-                    // If we just set to 0, gravity ticks later might pull it down slightly,
-                    // so we apply a small upward force to counteract standard gravity (0.08/tick) if needed,
-                    // but forcing velocity every tick usually works.
-                    yVel = 0.0;
-                }
-
-                // Apply velocity. Preserve X/Z so player can move normally using vanilla controls.
-                // If we overwrite X/Z, the player can't move.
-                user.setVelocity(velocity.x, yVel, velocity.z);
-                user.velocityModified = true;
-
-                // Reduced sound frequency
-                if (user.age % 40 == 0) {
-                    user.getWorld().playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENTITY_PHANTOM_FLAP, SoundCategory.PLAYERS, 0.1f, 2.0f);
-                }
-
-                if (user.age % 10 == 0) {
-                    if (user.getWorld() instanceof ServerWorld sw) {
+                    // Audio (Broadcast to others)
+                    if (user.age % 40 == 0) {
+                        user.getWorld().playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENTITY_PHANTOM_FLAP, SoundCategory.PLAYERS, 0.1f, 2.0f);
+                    }
+                    // Particles (Broadcast)
+                    if (user.age % 10 == 0 && user.getWorld() instanceof ServerWorld sw) {
                         sw.spawnParticles(ParticleTypes.CLOUD, user.getX(), user.getY() - 0.2, user.getZ(), 1, 0.2, 0, 0.2, 0);
                     }
                 }
 
-                if (user.age % 60 == 0) data.addXp(0.5f);
+                // --- MOVEMENT LOGIC ---
+                user.fallDistance = 0;
+                user.setNoGravity(true); // Essential on both sides
+
+                // Determine if we should calculate physics
+                // Players: Run on CLIENT (Prediction). Skip on SERVER (Trust Client).
+                // Mobs: Run on SERVER.
+                boolean shouldApplyPhysics = user.getWorld().isClient || !(user instanceof PlayerEntity);
+
+                if (shouldApplyPhysics) {
+                    // Calculate Y velocity (Hover control)
+                    double yVel = 0.0;
+
+                    // Vertical Movement is now AWAKENING EXCLUSIVE
+                    if (data.isAwakened()) {
+                        boolean isJumping = ((LivingEntityAccessor)user).isJumping();
+                        if (user.isSneaking()) {
+                            yVel = -0.2; // Descent speed
+                        } else if (isJumping) {
+                            yVel = 0.2; // Ascent speed
+                        }
+                    }
+                    // If not awakened, yVel stays 0.0 (Perfect Hover)
+
+                    // Scale Speed with Level
+                    // Lvl 1: 0.025 ~ Vanilla Walk
+                    // Lvl 100: 0.175 ~ Fast Flight
+                    float airSpeed = 0.025f + (data.getLevel() * 0.0015f);
+
+                    // Apply input-based velocity
+                    user.updateVelocity(airSpeed, new Vec3d(user.sidewaysSpeed, 0, user.forwardSpeed));
+
+                    Vec3d currentVel = user.getVelocity();
+                    // Apply Drag to prevent sliding forever (0.91 is roughly block friction)
+                    user.setVelocity(currentVel.x * 0.91, yVel, currentVel.z * 0.91);
+                    user.velocityModified = true;
+                }
 
             } else {
-                data.setRegenActive(false);
-                if(user instanceof PlayerEntity p) p.sendMessage(Text.literal("Stamina Depleted! Falling.").formatted(Formatting.RED), true);
+                // Stamina ran out
+                if (!user.getWorld().isClient) {
+                    data.setRegenActive(false);
+                    user.setNoGravity(false);
+                    if(user instanceof PlayerEntity p) p.sendMessage(Text.literal("Stamina Depleted! Falling.").formatted(Formatting.RED), true);
+                } else {
+                    // Client visual update
+                    user.setNoGravity(false);
+                }
+            }
+        } else {
+            // Safety: restore gravity if quirk is inactive
+            if (user.hasNoGravity()) {
+                user.setNoGravity(false);
             }
         }
+    }
+
+    @Override
+    public void onUnequip(LivingEntity user) {
+        super.onUnequip(user);
+        user.setNoGravity(false);
     }
 }

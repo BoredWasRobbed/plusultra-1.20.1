@@ -66,7 +66,9 @@ public class QuirkHud implements HudRenderCallback {
                 displayText += String.format(" (%.1fs)", cd / 20.0f);
                 textColor = COOLDOWN_COLOR;
             } else {
-                displayText += " [" + ability.getCost(client.player) + "]";
+                // UPDATED: Use getCost(player) to reflect dynamic/scaled costs
+                int cost = ability.getCost(client.player);
+                displayText += " [" + cost + "]";
                 textColor = isSelected ? 0xFFD700 : 0xAAAAAA;
             }
 
@@ -113,7 +115,7 @@ public class QuirkHud implements HudRenderCallback {
         context.drawText(font, nameText, rightEdge - font.getWidth(nameText), headerY, nameColor, true);
 
         // --- 4. LEVEL & XP (High above name) ---
-        int levelY = headerY - 20; // Increased spacing from -12 to -20
+        int levelY = headerY - 20;
 
         int xpBarWidth = 40;
         int xpBarX = rightEdge - xpBarWidth;

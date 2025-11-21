@@ -63,13 +63,16 @@ public class PlusUltraClientNetworking {
         boolean giveActive = buf.readBoolean();
         String quirkToGive = buf.readString();
 
-        // READ STATS
         int statPoints = buf.readInt();
         int str = buf.readInt();
         int hp = buf.readInt();
         int spd = buf.readInt();
         int stam = buf.readInt();
         int def = buf.readInt();
+
+        // NEW: Charge Data
+        boolean isCharging = buf.readBoolean();
+        int chargeTimer = buf.readInt();
 
         client.execute(() -> {
             if (client.world == null) return;
@@ -105,13 +108,15 @@ public class PlusUltraClientNetworking {
             data.setGiveActive(giveActive);
             data.setQuirkToGive(quirkToGive);
 
-            // Set Stats
             data.setStatPoints(statPoints);
             data.setStrengthStat(str);
             data.setHealthStat(hp);
             data.setSpeedStat(spd);
             data.setStaminaStat(stam);
             data.setDefenseStat(def);
+
+            data.setCharging(isCharging);
+            data.setChargeTime(chargeTimer);
         });
     }
 

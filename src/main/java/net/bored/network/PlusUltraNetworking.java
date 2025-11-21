@@ -27,9 +27,10 @@ public class PlusUltraNetworking {
     public static final Identifier AFO_OPERATION_PACKET = new Identifier("plusultra", "afo_operation");
     public static final Identifier OPEN_STEAL_SELECTION_PACKET = new Identifier("plusultra", "open_steal_selection");
     public static final Identifier STEAL_CONFIRM_PACKET = new Identifier("plusultra", "steal_confirm");
-
-    // NEW: Upgrade Stat Packet
     public static final Identifier UPGRADE_STAT_PACKET = new Identifier("plusultra", "upgrade_stat");
+
+    // NEW: Charge Packet
+    public static final Identifier CHARGE_ABILITY_PACKET = new Identifier("plusultra", "charge_ability");
 
     public static void init() {
         ServerPlayNetworking.registerGlobalReceiver(ACTIVATE_ABILITY_PACKET, PlusUltraNetworking::handleActivate);
@@ -37,12 +38,15 @@ public class PlusUltraNetworking {
         ServerPlayNetworking.registerGlobalReceiver(AFO_OPERATION_PACKET, PlusUltraNetworking::handleAFO);
         ServerPlayNetworking.registerGlobalReceiver(STEAL_CONFIRM_PACKET, PlusUltraNetworking::handleStealConfirm);
         ServerPlayNetworking.registerGlobalReceiver(UPGRADE_STAT_PACKET, PlusUltraNetworking::handleUpgradeStat);
+        ServerPlayNetworking.registerGlobalReceiver(CHARGE_ABILITY_PACKET, PlusUltraNetworking::handleCharge);
     }
 
-    // ... existing handlers ...
     private static void handleActivate(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
+            // Stop charging when activating
+            data.setCharging(false);
+
             Quirk quirk = data.getQuirk();
             if (quirk != null) {
                 int slot = data.getSelectedSlot();
@@ -68,6 +72,15 @@ public class PlusUltraNetworking {
         });
     }
 
+    private static void handleCharge(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
+        boolean charging = buf.readBoolean();
+        server.execute(() -> {
+            IQuirkData data = (IQuirkData) player;
+            data.setCharging(charging);
+        });
+    }
+
+    // ... other handlers (cycle, afo, steal, upgrade) unchanged from previous ...
     private static void handleCycle(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         int direction = buf.readInt();
         boolean isSneaking = buf.readBoolean();
@@ -149,19 +162,15 @@ public class PlusUltraNetworking {
         });
     }
 
-    // NEW: Handle Stat Upgrade with Amount
     private static void handleUpgradeStat(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
-        int statIndex = buf.readInt(); // 0=Str, 1=Health, 2=Speed, 3=Stamina, 4=Defense
-        int amount = buf.readInt();    // Requested amount to add
+        int statIndex = buf.readInt();
+        int amount = buf.readInt();
 
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
             int available = data.getStatPoints();
-
             if (available > 0 && amount > 0) {
                 int toSpend = Math.min(amount, available);
-
-                // Check stat cap (50)
                 int currentVal = 0;
                 switch (statIndex) {
                     case 0 -> currentVal = data.getStrengthStat();
@@ -170,15 +179,11 @@ public class PlusUltraNetworking {
                     case 3 -> currentVal = data.getStaminaStat();
                     case 4 -> currentVal = data.getDefenseStat();
                 }
-
                 int space = 50 - currentVal;
                 if (space <= 0) return;
-
                 int actualAdd = Math.min(toSpend, space);
-
                 if (actualAdd > 0) {
-                    data.addStatPoints(-actualAdd); // Deduct points
-
+                    data.addStatPoints(-actualAdd);
                     switch (statIndex) {
                         case 0 -> data.setStrengthStat(data.getStrengthStat() + actualAdd);
                         case 1 -> data.setHealthStat(data.getHealthStat() + actualAdd);

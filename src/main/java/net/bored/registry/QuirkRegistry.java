@@ -1,6 +1,7 @@
 package net.bored.registry;
 
 import net.bored.api.quirk.Quirk;
+import net.bored.common.quirks.*;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
 import net.fabricmc.fabric.api.event.registry.FabricRegistryBuilder;
@@ -28,6 +29,11 @@ public class QuirkRegistry {
     }
 
     public static void init() {
-        // Call this from your Main Class onInitialize to trigger static block
+        QuirkRegistry.register(new WarpGateQuirk());
+        QuirkRegistry.register(new SuperRegenerationQuirk());
+        QuirkRegistry.register(new AllForOneQuirk());
+        QuirkRegistry.register(new FloatQuirk());
+        QuirkRegistry.register(new AttractionQuirk());
+        QuirkRegistry.register(new PropulsionQuirk());
     }
 }

@@ -81,8 +81,12 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Unique private boolean giveActive = false;
     @Unique private String quirkToGive = "";
 
+    // NEW: Charge state & timer
+    @Unique private boolean isCharging = false;
+    @Unique private int chargeTimer = 0;
+
     // NEW STAT FIELDS
-    @Unique private int statPoints = 1; // Starts at 1
+    @Unique private int statPoints = 1;
     @Unique private int strengthStat = 0;
     @Unique private int healthStat = 0;
     @Unique private int speedStat = 0;
@@ -95,7 +99,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Unique private static final UUID SPEED_MOD_ID = UUID.fromString("77987547-8562-4674-a267-127685430003");
     @Unique private static final UUID DEFENSE_MOD_ID = UUID.fromString("77987547-8562-4674-a267-127685430004");
 
-    // ... existing getter/setters implementation ...
+    // ... existing getter/setters ...
     @Override public Quirk getQuirk() { if (quirkId == null) return null; return QuirkRegistry.get(quirkId); }
     @Override public void setQuirk(Identifier id) {
         if (id != null && PlusUltraConfig.get().isQuirkDisabled(id)) {
@@ -130,7 +134,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
 
     @Override public void setLevel(int level) {
         this.level = Math.max(1, level);
-        recalculateStats(); // Update max stamina and attributes
+        recalculateStats();
         this.syncQuirkData();
     }
 
@@ -145,10 +149,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
             this.xp -= max;
             this.level++;
             max = getMaxXp();
-
-            // Grant Stat Points
-            this.addStatPoints(1); // 1 point per level
-
+            this.addStatPoints(1);
             if (this.getWorld() != null && !this.getWorld().isClient && (Object)this instanceof PlayerEntity player) {
                 this.getWorld().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 1.0f, 1.0f);
                 player.sendMessage(Text.literal("Quirk Level Up! (" + this.level + ")").formatted(Formatting.GOLD, Formatting.BOLD), true);
@@ -159,29 +160,19 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     }
 
     @Unique private void recalculateStats() {
-        // Base + (Level * 20) + (StaminaStat * 10)
         float newMaxStamina = 100.0f + (this.level * 20.0f) + (this.staminaStat * 10.0f);
         this.setMaxStamina(newMaxStamina);
-
-        // Null check world to prevent crash during early initialization
         if (this.getWorld() != null && !this.getWorld().isClient) {
             updateAttribute(EntityAttributes.GENERIC_ATTACK_DAMAGE, STRENGTH_MOD_ID, "PlusUltra Strength", this.strengthStat * 0.5);
             updateAttribute(EntityAttributes.GENERIC_MAX_HEALTH, HEALTH_MOD_ID, "PlusUltra Health", this.healthStat * 2.0);
-
-            // REDUCED SPEED SCALING: 0.002
             updateAttribute(EntityAttributes.GENERIC_MOVEMENT_SPEED, SPEED_MOD_ID, "PlusUltra Speed", this.speedStat * 0.002);
-
             updateAttribute(EntityAttributes.GENERIC_ARMOR, DEFENSE_MOD_ID, "PlusUltra Defense", this.defenseStat * 0.5);
-
-            // Heal up if max health increased
             if (((LivingEntity)(Object)this).getHealth() > ((LivingEntity)(Object)this).getMaxHealth()) {
                 ((LivingEntity)(Object)this).setHealth(((LivingEntity)(Object)this).getMaxHealth());
             }
         }
-
-        // STEP HEIGHT LOGIC
         if (this.speedStat >= 10) {
-            this.setStepHeight(1.5f); // 1.5 blocks
+            this.setStepHeight(1.5f);
         } else {
             this.setStepHeight(0.6f);
         }
@@ -191,16 +182,11 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         EntityAttributeInstance instance = ((LivingEntity)(Object)this).getAttributeInstance(attribute);
         if (instance != null) {
             EntityAttributeModifier modifier = instance.getModifier(uuid);
-            if (modifier != null) {
-                instance.removeModifier(modifier);
-            }
-            if (value > 0) {
-                instance.addPersistentModifier(new EntityAttributeModifier(uuid, name, value, EntityAttributeModifier.Operation.ADDITION));
-            }
+            if (modifier != null) instance.removeModifier(modifier);
+            if (value > 0) instance.addPersistentModifier(new EntityAttributeModifier(uuid, name, value, EntityAttributeModifier.Operation.ADDITION));
         }
     }
 
-    // ... existing movement/combat logic ...
     @Override public int getSelectedSlot() { return selectedSlot; }
     @Override public void setSelectedSlot(int slot) { this.selectedSlot = slot; this.syncQuirkData(); }
     @Override public void cycleSlot(int direction) {
@@ -287,9 +273,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         return 1;
     }
     @Override public void addStolenQuirk(String quirkId) {
-        if (quirkId.equals("plusultra:all_for_one") && stolenQuirks.contains(quirkId)) {
-            return;
-        }
+        if (quirkId.equals("plusultra:all_for_one") && stolenQuirks.contains(quirkId)) { return; }
         stolenQuirks.add(quirkId);
         this.syncQuirkData();
     }
@@ -318,12 +302,24 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public String getQuirkToGive() { return quirkToGive; }
     @Override public void setQuirkToGive(String quirkId) { this.quirkToGive = quirkId; this.syncQuirkData(); }
 
-    // NEW STAT IMPLEMENTATIONS
+    // Charge Implementation
+    @Override public boolean isCharging() { return isCharging; }
+
+    @Override public void setCharging(boolean charging) {
+        this.isCharging = charging;
+        if (!charging) {
+            this.chargeTimer = 0; // Reset timer on stop
+        }
+        this.syncQuirkData();
+    }
+
+    @Override public int getChargeTime() { return chargeTimer; }
+    @Override public void setChargeTime(int ticks) { this.chargeTimer = ticks; }
+    @Override public void incrementChargeTime() { this.chargeTimer++; }
+
     @Override public int getStatPoints() { return statPoints; }
     @Override public void setStatPoints(int points) { this.statPoints = points; this.syncQuirkData(); }
     @Override public void addStatPoints(int points) { this.statPoints += points; this.syncQuirkData(); }
-
-    // UPDATED SETTERS: Cap at 50
     @Override public int getStrengthStat() { return strengthStat; }
     @Override public void setStrengthStat(int value) { this.strengthStat = Math.min(50, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getHealthStat() { return healthStat; }
@@ -368,14 +364,16 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         buf.writeBoolean(this.stealActive);
         buf.writeBoolean(this.giveActive);
         buf.writeString(this.quirkToGive);
-
-        // Sync Stats
         buf.writeInt(this.statPoints);
         buf.writeInt(this.strengthStat);
         buf.writeInt(this.healthStat);
         buf.writeInt(this.speedStat);
         buf.writeInt(this.staminaStat);
         buf.writeInt(this.defenseStat);
+
+        // Sync Charging
+        buf.writeBoolean(this.isCharging);
+        buf.writeInt(this.chargeTimer); // Sync Timer
 
         for (ServerPlayerEntity player : PlayerLookup.tracking((Entity)(Object)this)) {
             ServerPlayNetworking.send(player, PlusUltraNetworking.SYNC_DATA_PACKET, buf);
@@ -415,8 +413,6 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
             }
             nbt.put("WarpAnchors", anchorList);
             nbt.putInt("SelectedAnchorIndex", this.selectedAnchorIndex);
-
-            // Save Stats
             nbt.putInt("StatPoints", this.statPoints);
             nbt.putInt("StrengthStat", this.strengthStat);
             nbt.putInt("HealthStat", this.healthStat);
@@ -465,12 +461,9 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
                         if (dimStr != null && !dimStr.isEmpty()) {
                             this.anchorDimensions.add(RegistryKey.of(RegistryKeys.WORLD, new Identifier(dimStr)));
                         } else {
-                            // Default fallback to Overworld if dim is missing
                             this.anchorDimensions.add(World.OVERWORLD);
                         }
-                    } catch (Exception ignored) {
-                        // Skip bad anchor
-                    }
+                    } catch (Exception ignored) {}
                 }
             }
             if (nbt.contains("SelectedAnchorIndex")) this.selectedAnchorIndex = nbt.getInt("SelectedAnchorIndex");
@@ -478,19 +471,15 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
             if (q != null && this.cooldowns.length != q.getAbilities().size()) {
                 this.cooldowns = new int[q.getAbilities().size()];
             }
-
-            // Read Stats
             if (nbt.contains("StatPoints")) this.statPoints = nbt.getInt("StatPoints");
             if (nbt.contains("StrengthStat")) this.strengthStat = nbt.getInt("StrengthStat");
             if (nbt.contains("HealthStat")) this.healthStat = nbt.getInt("HealthStat");
             if (nbt.contains("SpeedStat")) this.speedStat = nbt.getInt("SpeedStat");
             if (nbt.contains("StaminaStat")) this.staminaStat = nbt.getInt("StaminaStat");
             if (nbt.contains("DefenseStat")) this.defenseStat = nbt.getInt("DefenseStat");
-
-            // Force update attributes
             recalculateStats();
         } catch (Exception e) {
-            System.err.println("PlusUltra: Error reading NBT data. Restoring defaults to prevent crash.");
+            System.err.println("PlusUltra: Error reading NBT data. Restoring defaults.");
             e.printStackTrace();
         }
     }

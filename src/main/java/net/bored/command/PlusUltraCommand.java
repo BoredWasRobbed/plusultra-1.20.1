@@ -34,6 +34,12 @@ public class PlusUltraCommand {
                                         .then(CommandManager.argument("quirk_id", IdentifierArgumentType.identifier())
                                                 .suggests(QUIRK_SUGGESTIONS)
                                                 .executes(PlusUltraCommand::setQuirk))))
+                        // NEW: Add Command
+                        .then(CommandManager.literal("add")
+                                .then(CommandManager.argument("target", EntityArgumentType.players())
+                                        .then(CommandManager.argument("quirk_id", IdentifierArgumentType.identifier())
+                                                .suggests(QUIRK_SUGGESTIONS)
+                                                .executes(PlusUltraCommand::addQuirk))))
                         .then(CommandManager.literal("clear")
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
                                         .executes(PlusUltraCommand::clearQuirk)))
@@ -63,7 +69,6 @@ public class PlusUltraCommand {
                                         .then(CommandManager.argument("amount", FloatArgumentType.floatArg(1))
                                                 .executes(PlusUltraCommand::addXp))))
                 )
-                // NEW: Stat Command
                 .then(CommandManager.literal("stat")
                         .then(CommandManager.literal("give")
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
@@ -80,22 +85,69 @@ public class PlusUltraCommand {
         Identifier quirkId = IdentifierArgumentType.getIdentifier(context, "quirk_id");
         Quirk quirk = QuirkRegistry.get(quirkId);
         if (quirk == null) return 0;
+
         for (ServerPlayerEntity player : players) {
             IQuirkData data = (IQuirkData) player;
+
+            // 1. WIPE STORAGE: Ensure no previous quirks remain
+            data.getStolenQuirks().clear();
+
+            // 2. RESET AFO FLAG: Ensure All For One status is cleared
+            // This fixes the issue where switching off AFO leaves the flag true
+            data.setAllForOne(false);
+
+            // 3. Set Active Quirk (Overwrites active slot)
             data.setQuirk(quirkId);
             quirk.onEquip(player);
-            // Notify Target
             player.sendMessage(Text.literal("Your quirk has been set to " + quirk.getName().getString()).formatted(Formatting.GREEN), false);
         }
-        // Notify Source
-        context.getSource().sendFeedback(() -> Text.literal("Set quirk for " + players.size() + " players").formatted(Formatting.GREEN), true);
+        context.getSource().sendFeedback(() -> Text.literal("Set quirk (and wiped storage/AFO) for " + players.size() + " players").formatted(Formatting.GREEN), true);
+        return 1;
+    }
+
+    // NEW: Add Quirk to Storage
+    private static int addQuirk(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
+        Identifier quirkId = IdentifierArgumentType.getIdentifier(context, "quirk_id");
+
+        // Validate quirk exists
+        if (QuirkRegistry.get(quirkId) == null) return 0;
+
+        String idString = quirkId.toString();
+
+        for (ServerPlayerEntity player : players) {
+            IQuirkData data = (IQuirkData) player;
+
+            // 1. Add CURRENTLY ACTIVE quirk to storage if it's not already there.
+            if (data.hasQuirk()) {
+                String activeId = data.getQuirk().getId().toString();
+                if (!data.getStolenQuirks().contains(activeId)) {
+                    data.addStolenQuirk(activeId);
+                    // Optional: Notify player?
+                    // player.sendMessage(Text.literal("Saved previous quirk to storage: " + activeId).formatted(Formatting.GRAY), false);
+                }
+            }
+
+            // 2. Add NEW quirk to storage if it's not already there (and not active).
+            boolean isActive = data.hasQuirk() && data.getQuirk().getId().toString().equals(idString);
+            boolean isStored = data.getStolenQuirks().contains(idString);
+
+            if (!isActive && !isStored) {
+                data.addStolenQuirk(idString);
+                player.sendMessage(Text.literal("Added quirk to storage: " + quirkId).formatted(Formatting.AQUA), false);
+            }
+        }
+        context.getSource().sendFeedback(() -> Text.literal("Added quirk to storage for " + players.size() + " players").formatted(Formatting.AQUA), true);
         return 1;
     }
 
     private static int clearQuirk(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
         for (ServerPlayerEntity player : players) {
-            ((IQuirkData) player).setQuirk(null);
+            IQuirkData data = (IQuirkData) player;
+            data.setQuirk(null);
+            data.getStolenQuirks().clear();
+            data.setAllForOne(false); // Also clear AFO flag on clear
             player.sendMessage(Text.literal("Your quirk has been cleared.").formatted(Formatting.YELLOW), false);
         }
         context.getSource().sendFeedback(() -> Text.literal("Cleared quirk for " + players.size() + " players").formatted(Formatting.YELLOW), true);
@@ -128,8 +180,6 @@ public class PlusUltraCommand {
             int oldLevel = data.getLevel();
             data.setLevel(level);
 
-            // Grant retroactive stat points if leveling up
-            // CHANGED: 1 point per level difference (was 3)
             if (level > oldLevel) {
                 int points = (level - oldLevel);
                 data.addStatPoints(points);
@@ -153,7 +203,6 @@ public class PlusUltraCommand {
         return 1;
     }
 
-    // NEW: Give Stat Points
     private static int giveStatPoints(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
         int points = IntegerArgumentType.getInteger(context, "points");

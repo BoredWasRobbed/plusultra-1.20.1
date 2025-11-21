@@ -30,7 +30,10 @@ public class PlusUltraConfig {
     public List<String> starterQuirks = new ArrayList<>(Arrays.asList(
             "plusultra:super_regeneration",
             "plusultra:warp_gate",
-            "plusultra:all_for_one"
+            "plusultra:all_for_one",
+            "plusultra:float",
+            "plusultra:attraction",
+            "plusultra:propulsion"
     ));
 
     // List of Quirks that are completely disabled (cannot be equipped)

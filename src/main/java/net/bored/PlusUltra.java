@@ -4,11 +4,7 @@ import net.bored.api.data.IQuirkData;
 import net.bored.api.quirk.Quirk;
 import net.bored.common.entity.VillainEntity;
 import net.bored.common.entity.WarpProjectileEntity;
-import net.bored.common.quirks.AllForOneQuirk;
-import net.bored.common.quirks.AttractionQuirk;
-import net.bored.common.quirks.FloatQuirk;
-import net.bored.common.quirks.SuperRegenerationQuirk;
-import net.bored.common.quirks.WarpGateQuirk;
+import net.bored.common.quirks.*;
 import net.bored.config.PlusUltraConfig;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -74,13 +70,6 @@ public class PlusUltra implements ModInitializer {
 		PlusUltraConfig.get();
 
 		QuirkRegistry.init();
-		QuirkRegistry.register(new WarpGateQuirk());
-		QuirkRegistry.register(new SuperRegenerationQuirk());
-		QuirkRegistry.register(new AllForOneQuirk());
-
-		// Updated Simple Quirks
-		QuirkRegistry.register(new FloatQuirk());
-		QuirkRegistry.register(new AttractionQuirk());
 
 		FabricDefaultAttributeRegistry.register(VILLAIN_ENTITY, VillainEntity.createVillainAttributes());
 

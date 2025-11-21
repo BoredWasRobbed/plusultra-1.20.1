@@ -75,6 +75,15 @@ public interface IQuirkData {
     void setQuirkToGive(String quirkId);
     void syncQuirkData();
 
+    // Charge State for Propulsion (and future quirks)
+    boolean isCharging();
+    void setCharging(boolean charging);
+
+    // NEW: Charge Timer
+    int getChargeTime();
+    void setChargeTime(int ticks);
+    void incrementChargeTime();
+
     // NEW: RPG Stats
     int getStatPoints();
     void setStatPoints(int points);
