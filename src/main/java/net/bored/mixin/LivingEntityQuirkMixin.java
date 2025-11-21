@@ -82,7 +82,7 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Unique private String quirkToGive = "";
 
     // NEW STAT FIELDS
-    @Unique private int statPoints = 0;
+    @Unique private int statPoints = 1; // Starts at 1
     @Unique private int strengthStat = 0;
     @Unique private int healthStat = 0;
     @Unique private int speedStat = 0;
@@ -147,12 +147,12 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
             max = getMaxXp();
 
             // Grant Stat Points
-            this.addStatPoints(3); // 3 points per level
+            this.addStatPoints(1); // 1 point per level
 
-            if (!this.getWorld().isClient && (Object)this instanceof PlayerEntity player) {
+            if (this.getWorld() != null && !this.getWorld().isClient && (Object)this instanceof PlayerEntity player) {
                 this.getWorld().playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 1.0f, 1.0f);
                 player.sendMessage(Text.literal("Quirk Level Up! (" + this.level + ")").formatted(Formatting.GOLD, Formatting.BOLD), true);
-                player.sendMessage(Text.literal("+3 Stat Points (Press M)").formatted(Formatting.YELLOW), false);
+                player.sendMessage(Text.literal("+1 Stat Point (Press M)").formatted(Formatting.YELLOW), false);
             }
         }
         recalculateStats();
@@ -163,17 +163,27 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
         float newMaxStamina = 100.0f + (this.level * 20.0f) + (this.staminaStat * 10.0f);
         this.setMaxStamina(newMaxStamina);
 
-        // Apply Attribute Modifiers
-        if (!this.getWorld().isClient) {
+        // Null check world to prevent crash during early initialization
+        if (this.getWorld() != null && !this.getWorld().isClient) {
             updateAttribute(EntityAttributes.GENERIC_ATTACK_DAMAGE, STRENGTH_MOD_ID, "PlusUltra Strength", this.strengthStat * 0.5);
             updateAttribute(EntityAttributes.GENERIC_MAX_HEALTH, HEALTH_MOD_ID, "PlusUltra Health", this.healthStat * 2.0);
-            updateAttribute(EntityAttributes.GENERIC_MOVEMENT_SPEED, SPEED_MOD_ID, "PlusUltra Speed", this.speedStat * 0.02);
+
+            // REDUCED SPEED SCALING: 0.002
+            updateAttribute(EntityAttributes.GENERIC_MOVEMENT_SPEED, SPEED_MOD_ID, "PlusUltra Speed", this.speedStat * 0.002);
+
             updateAttribute(EntityAttributes.GENERIC_ARMOR, DEFENSE_MOD_ID, "PlusUltra Defense", this.defenseStat * 0.5);
 
             // Heal up if max health increased
             if (((LivingEntity)(Object)this).getHealth() > ((LivingEntity)(Object)this).getMaxHealth()) {
                 ((LivingEntity)(Object)this).setHealth(((LivingEntity)(Object)this).getMaxHealth());
             }
+        }
+
+        // STEP HEIGHT LOGIC
+        if (this.speedStat >= 10) {
+            this.setStepHeight(1.5f); // 1.5 blocks
+        } else {
+            this.setStepHeight(0.6f);
         }
     }
 
@@ -313,20 +323,20 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public void setStatPoints(int points) { this.statPoints = points; this.syncQuirkData(); }
     @Override public void addStatPoints(int points) { this.statPoints += points; this.syncQuirkData(); }
 
-    // UPDATED SETTERS: Cap at 100
+    // UPDATED SETTERS: Cap at 50
     @Override public int getStrengthStat() { return strengthStat; }
-    @Override public void setStrengthStat(int value) { this.strengthStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
+    @Override public void setStrengthStat(int value) { this.strengthStat = Math.min(50, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getHealthStat() { return healthStat; }
-    @Override public void setHealthStat(int value) { this.healthStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
+    @Override public void setHealthStat(int value) { this.healthStat = Math.min(50, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getSpeedStat() { return speedStat; }
-    @Override public void setSpeedStat(int value) { this.speedStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
+    @Override public void setSpeedStat(int value) { this.speedStat = Math.min(50, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getStaminaStat() { return staminaStat; }
-    @Override public void setStaminaStat(int value) { this.staminaStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
+    @Override public void setStaminaStat(int value) { this.staminaStat = Math.min(50, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getDefenseStat() { return defenseStat; }
-    @Override public void setDefenseStat(int value) { this.defenseStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
+    @Override public void setDefenseStat(int value) { this.defenseStat = Math.min(50, value); recalculateStats(); this.syncQuirkData(); }
 
     @Override public void syncQuirkData() {
-        if (this.getWorld().isClient) return;
+        if (this.getWorld() != null && this.getWorld().isClient) return;
         PacketByteBuf buf = PacketByteBufs.create();
         buf.writeInt(this.getId());
         boolean has = (this.quirkId != null);
@@ -377,92 +387,112 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
 
     @Inject(method = "writeCustomDataToNbt", at = @At("TAIL"))
     private void writeQuirkData(NbtCompound nbt, CallbackInfo ci) {
-        if (this.quirkId != null) nbt.putString("QuirkId", this.quirkId.toString());
-        nbt.putBoolean("IsAwakened", this.isAwakened);
-        nbt.putBoolean("HasReceivedStarter", this.hasReceivedStarter);
-        nbt.putInt("SelectedSlot", this.selectedSlot);
-        nbt.putFloat("Stamina", this.stamina);
-        nbt.putFloat("MaxStamina", this.maxStamina);
-        nbt.putIntArray("Cooldowns", this.cooldowns);
-        nbt.putInt("QuirkLevel", this.level);
-        nbt.putFloat("QuirkXp", this.xp);
-        nbt.putBoolean("RegenActive", this.regenActive);
-        nbt.putBoolean("IsAFO", this.isAllForOne);
-        NbtList stolenList = new NbtList();
-        for(String s : stolenQuirks) stolenList.add(NbtString.of(s));
-        nbt.put("StolenQuirks", stolenList);
-        NbtList passiveList = new NbtList();
-        for(String s : activePassives) passiveList.add(NbtString.of(s));
-        nbt.put("ActivePassives", passiveList);
-        NbtList anchorList = new NbtList();
-        for (int i = 0; i < anchorPositions.size(); i++) {
-            NbtCompound anchorTag = new NbtCompound();
-            Vec3d pos = anchorPositions.get(i);
-            anchorTag.putDouble("X", pos.x); anchorTag.putDouble("Y", pos.y); anchorTag.putDouble("Z", pos.z);
-            anchorTag.putString("Dim", anchorDimensions.get(i).getValue().toString());
-            anchorList.add(anchorTag);
-        }
-        nbt.put("WarpAnchors", anchorList);
-        nbt.putInt("SelectedAnchorIndex", this.selectedAnchorIndex);
+        try {
+            if (this.quirkId != null) nbt.putString("QuirkId", this.quirkId.toString());
+            nbt.putBoolean("IsAwakened", this.isAwakened);
+            nbt.putBoolean("HasReceivedStarter", this.hasReceivedStarter);
+            nbt.putInt("SelectedSlot", this.selectedSlot);
+            nbt.putFloat("Stamina", this.stamina);
+            nbt.putFloat("MaxStamina", this.maxStamina);
+            nbt.putIntArray("Cooldowns", this.cooldowns);
+            nbt.putInt("QuirkLevel", this.level);
+            nbt.putFloat("QuirkXp", this.xp);
+            nbt.putBoolean("RegenActive", this.regenActive);
+            nbt.putBoolean("IsAFO", this.isAllForOne);
+            NbtList stolenList = new NbtList();
+            for(String s : stolenQuirks) stolenList.add(NbtString.of(s));
+            nbt.put("StolenQuirks", stolenList);
+            NbtList passiveList = new NbtList();
+            for(String s : activePassives) passiveList.add(NbtString.of(s));
+            nbt.put("ActivePassives", passiveList);
+            NbtList anchorList = new NbtList();
+            for (int i = 0; i < anchorPositions.size(); i++) {
+                NbtCompound anchorTag = new NbtCompound();
+                Vec3d pos = anchorPositions.get(i);
+                anchorTag.putDouble("X", pos.x); anchorTag.putDouble("Y", pos.y); anchorTag.putDouble("Z", pos.z);
+                anchorTag.putString("Dim", anchorDimensions.get(i).getValue().toString());
+                anchorList.add(anchorTag);
+            }
+            nbt.put("WarpAnchors", anchorList);
+            nbt.putInt("SelectedAnchorIndex", this.selectedAnchorIndex);
 
-        // Save Stats
-        nbt.putInt("StatPoints", this.statPoints);
-        nbt.putInt("StrengthStat", this.strengthStat);
-        nbt.putInt("HealthStat", this.healthStat);
-        nbt.putInt("SpeedStat", this.speedStat);
-        nbt.putInt("StaminaStat", this.staminaStat);
-        nbt.putInt("DefenseStat", this.defenseStat);
+            // Save Stats
+            nbt.putInt("StatPoints", this.statPoints);
+            nbt.putInt("StrengthStat", this.strengthStat);
+            nbt.putInt("HealthStat", this.healthStat);
+            nbt.putInt("SpeedStat", this.speedStat);
+            nbt.putInt("StaminaStat", this.staminaStat);
+            nbt.putInt("DefenseStat", this.defenseStat);
+        } catch (Exception e) {
+            System.err.println("PlusUltra: Error writing NBT data: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     @Inject(method = "readCustomDataFromNbt", at = @At("TAIL"))
     private void readQuirkData(NbtCompound nbt, CallbackInfo ci) {
-        if (nbt.contains("QuirkId")) this.quirkId = new Identifier(nbt.getString("QuirkId"));
-        else this.quirkId = null;
-        this.isAwakened = nbt.getBoolean("IsAwakened");
-        this.hasReceivedStarter = nbt.getBoolean("HasReceivedStarter");
-        this.selectedSlot = nbt.getInt("SelectedSlot");
-        if (nbt.contains("Stamina")) this.stamina = nbt.getFloat("Stamina");
-        if (nbt.contains("MaxStamina")) this.maxStamina = nbt.getFloat("MaxStamina");
-        if (nbt.contains("Cooldowns")) this.cooldowns = nbt.getIntArray("Cooldowns");
-        if (nbt.contains("QuirkLevel")) this.level = nbt.getInt("QuirkLevel");
-        if (nbt.contains("QuirkXp")) this.xp = nbt.getFloat("QuirkXp");
-        if (nbt.contains("RegenActive")) this.regenActive = nbt.getBoolean("RegenActive");
-        this.isAllForOne = nbt.getBoolean("IsAFO");
-        this.stolenQuirks.clear();
-        if (nbt.contains("StolenQuirks")) {
-            NbtList list = nbt.getList("StolenQuirks", NbtElement.STRING_TYPE);
-            for(NbtElement e : list) stolenQuirks.add(e.asString());
-        }
-        this.activePassives.clear();
-        if (nbt.contains("ActivePassives")) {
-            NbtList list = nbt.getList("ActivePassives", NbtElement.STRING_TYPE);
-            for(NbtElement e : list) activePassives.add(e.asString());
-        }
-        this.anchorPositions.clear(); this.anchorDimensions.clear();
-        if (nbt.contains("WarpAnchors")) {
-            NbtList anchorList = nbt.getList("WarpAnchors", NbtElement.COMPOUND_TYPE);
-            for (int i = 0; i < anchorList.size(); i++) {
-                NbtCompound anchorTag = anchorList.getCompound(i);
-                this.anchorPositions.add(new Vec3d(anchorTag.getDouble("X"), anchorTag.getDouble("Y"), anchorTag.getDouble("Z")));
-                this.anchorDimensions.add(RegistryKey.of(RegistryKeys.WORLD, new Identifier(anchorTag.getString("Dim"))));
+        try {
+            if (nbt.contains("QuirkId")) this.quirkId = new Identifier(nbt.getString("QuirkId"));
+            else this.quirkId = null;
+            this.isAwakened = nbt.getBoolean("IsAwakened");
+            this.hasReceivedStarter = nbt.getBoolean("HasReceivedStarter");
+            this.selectedSlot = nbt.getInt("SelectedSlot");
+            if (nbt.contains("Stamina")) this.stamina = nbt.getFloat("Stamina");
+            if (nbt.contains("MaxStamina")) this.maxStamina = nbt.getFloat("MaxStamina");
+            if (nbt.contains("Cooldowns")) this.cooldowns = nbt.getIntArray("Cooldowns");
+            if (nbt.contains("QuirkLevel")) this.level = nbt.getInt("QuirkLevel");
+            if (nbt.contains("QuirkXp")) this.xp = nbt.getFloat("QuirkXp");
+            if (nbt.contains("RegenActive")) this.regenActive = nbt.getBoolean("RegenActive");
+            this.isAllForOne = nbt.getBoolean("IsAFO");
+            this.stolenQuirks.clear();
+            if (nbt.contains("StolenQuirks")) {
+                NbtList list = nbt.getList("StolenQuirks", NbtElement.STRING_TYPE);
+                for(NbtElement e : list) stolenQuirks.add(e.asString());
             }
-        }
-        if (nbt.contains("SelectedAnchorIndex")) this.selectedAnchorIndex = nbt.getInt("SelectedAnchorIndex");
-        Quirk q = getQuirk();
-        if (q != null && this.cooldowns.length != q.getAbilities().size()) {
-            this.cooldowns = new int[q.getAbilities().size()];
-        }
+            this.activePassives.clear();
+            if (nbt.contains("ActivePassives")) {
+                NbtList list = nbt.getList("ActivePassives", NbtElement.STRING_TYPE);
+                for(NbtElement e : list) activePassives.add(e.asString());
+            }
+            this.anchorPositions.clear(); this.anchorDimensions.clear();
+            if (nbt.contains("WarpAnchors")) {
+                NbtList anchorList = nbt.getList("WarpAnchors", NbtElement.COMPOUND_TYPE);
+                for (int i = 0; i < anchorList.size(); i++) {
+                    try {
+                        NbtCompound anchorTag = anchorList.getCompound(i);
+                        this.anchorPositions.add(new Vec3d(anchorTag.getDouble("X"), anchorTag.getDouble("Y"), anchorTag.getDouble("Z")));
+                        String dimStr = anchorTag.getString("Dim");
+                        if (dimStr != null && !dimStr.isEmpty()) {
+                            this.anchorDimensions.add(RegistryKey.of(RegistryKeys.WORLD, new Identifier(dimStr)));
+                        } else {
+                            // Default fallback to Overworld if dim is missing
+                            this.anchorDimensions.add(World.OVERWORLD);
+                        }
+                    } catch (Exception ignored) {
+                        // Skip bad anchor
+                    }
+                }
+            }
+            if (nbt.contains("SelectedAnchorIndex")) this.selectedAnchorIndex = nbt.getInt("SelectedAnchorIndex");
+            Quirk q = getQuirk();
+            if (q != null && this.cooldowns.length != q.getAbilities().size()) {
+                this.cooldowns = new int[q.getAbilities().size()];
+            }
 
-        // Read Stats
-        if (nbt.contains("StatPoints")) this.statPoints = nbt.getInt("StatPoints");
-        if (nbt.contains("StrengthStat")) this.strengthStat = nbt.getInt("StrengthStat");
-        if (nbt.contains("HealthStat")) this.healthStat = nbt.getInt("HealthStat");
-        if (nbt.contains("SpeedStat")) this.speedStat = nbt.getInt("SpeedStat");
-        if (nbt.contains("StaminaStat")) this.staminaStat = nbt.getInt("StaminaStat");
-        if (nbt.contains("DefenseStat")) this.defenseStat = nbt.getInt("DefenseStat");
+            // Read Stats
+            if (nbt.contains("StatPoints")) this.statPoints = nbt.getInt("StatPoints");
+            if (nbt.contains("StrengthStat")) this.strengthStat = nbt.getInt("StrengthStat");
+            if (nbt.contains("HealthStat")) this.healthStat = nbt.getInt("HealthStat");
+            if (nbt.contains("SpeedStat")) this.speedStat = nbt.getInt("SpeedStat");
+            if (nbt.contains("StaminaStat")) this.staminaStat = nbt.getInt("StaminaStat");
+            if (nbt.contains("DefenseStat")) this.defenseStat = nbt.getInt("DefenseStat");
 
-        // Force update attributes
-        recalculateStats();
+            // Force update attributes
+            recalculateStats();
+        } catch (Exception e) {
+            System.err.println("PlusUltra: Error reading NBT data. Restoring defaults to prevent crash.");
+            e.printStackTrace();
+        }
     }
 
     @Inject(method = "tick", at = @At("HEAD"))

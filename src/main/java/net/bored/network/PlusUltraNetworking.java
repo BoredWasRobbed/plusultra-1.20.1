@@ -149,21 +149,45 @@ public class PlusUltraNetworking {
         });
     }
 
-    // NEW: Handle Stat Upgrade
+    // NEW: Handle Stat Upgrade with Amount
     private static void handleUpgradeStat(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         int statIndex = buf.readInt(); // 0=Str, 1=Health, 2=Speed, 3=Stamina, 4=Defense
+        int amount = buf.readInt();    // Requested amount to add
+
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
-            if (data.getStatPoints() > 0) {
-                data.setStatPoints(data.getStatPoints() - 1);
+            int available = data.getStatPoints();
+
+            if (available > 0 && amount > 0) {
+                int toSpend = Math.min(amount, available);
+
+                // Check stat cap (50)
+                int currentVal = 0;
                 switch (statIndex) {
-                    case 0 -> data.setStrengthStat(data.getStrengthStat() + 1);
-                    case 1 -> data.setHealthStat(data.getHealthStat() + 1);
-                    case 2 -> data.setSpeedStat(data.getSpeedStat() + 1);
-                    case 3 -> data.setStaminaStat(data.getStaminaStat() + 1);
-                    case 4 -> data.setDefenseStat(data.getDefenseStat() + 1);
+                    case 0 -> currentVal = data.getStrengthStat();
+                    case 1 -> currentVal = data.getHealthStat();
+                    case 2 -> currentVal = data.getSpeedStat();
+                    case 3 -> currentVal = data.getStaminaStat();
+                    case 4 -> currentVal = data.getDefenseStat();
                 }
-                player.playSound(net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 2.0f);
+
+                int space = 50 - currentVal;
+                if (space <= 0) return;
+
+                int actualAdd = Math.min(toSpend, space);
+
+                if (actualAdd > 0) {
+                    data.addStatPoints(-actualAdd); // Deduct points
+
+                    switch (statIndex) {
+                        case 0 -> data.setStrengthStat(data.getStrengthStat() + actualAdd);
+                        case 1 -> data.setHealthStat(data.getHealthStat() + actualAdd);
+                        case 2 -> data.setSpeedStat(data.getSpeedStat() + actualAdd);
+                        case 3 -> data.setStaminaStat(data.getStaminaStat() + actualAdd);
+                        case 4 -> data.setDefenseStat(data.getDefenseStat() + actualAdd);
+                    }
+                    player.playSound(net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 2.0f);
+                }
             }
         });
     }

@@ -129,9 +129,9 @@ public class PlusUltraCommand {
             data.setLevel(level);
 
             // Grant retroactive stat points if leveling up
-            // 3 points per level difference
+            // CHANGED: 1 point per level difference (was 3)
             if (level > oldLevel) {
-                int points = (level - oldLevel) * 3;
+                int points = (level - oldLevel);
                 data.addStatPoints(points);
                 player.sendMessage(Text.literal("Level set to " + level + ". +" + points + " Stat Points.").formatted(Formatting.GOLD), false);
             } else {
