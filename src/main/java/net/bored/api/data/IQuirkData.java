@@ -1,6 +1,7 @@
 package net.bored.api.data;
 
 import net.bored.api.quirk.Quirk;
+import net.minecraft.item.ItemStack;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
@@ -103,4 +104,9 @@ public interface IQuirkData {
 
     int getDefenseStat();
     void setDefenseStat(int value);
+
+    // NEW: Fusion Storage
+    List<ItemStack> getFusionItems();
+    void addFusionItem(ItemStack stack);
+    void clearFusionItems();
 }

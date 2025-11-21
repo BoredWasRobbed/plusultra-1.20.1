@@ -16,6 +16,7 @@ import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
@@ -92,6 +93,9 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Unique private int speedStat = 0;
     @Unique private int staminaStat = 0;
     @Unique private int defenseStat = 0;
+
+    // NEW: Fusion Storage
+    @Unique private final List<ItemStack> fusionItems = new ArrayList<>();
 
     // Attribute UUIDs
     @Unique private static final UUID STRENGTH_MOD_ID = UUID.fromString("77987547-8562-4674-a267-127685430001");
@@ -331,6 +335,11 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public int getDefenseStat() { return defenseStat; }
     @Override public void setDefenseStat(int value) { this.defenseStat = Math.min(50, value); recalculateStats(); this.syncQuirkData(); }
 
+    // Fusion Storage Implementation
+    @Override public List<ItemStack> getFusionItems() { return fusionItems; }
+    @Override public void addFusionItem(ItemStack stack) { fusionItems.add(stack); }
+    @Override public void clearFusionItems() { fusionItems.clear(); }
+
     @Override public void syncQuirkData() {
         if (this.getWorld() != null && this.getWorld().isClient) return;
         PacketByteBuf buf = PacketByteBufs.create();
@@ -419,6 +428,16 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
             nbt.putInt("SpeedStat", this.speedStat);
             nbt.putInt("StaminaStat", this.staminaStat);
             nbt.putInt("DefenseStat", this.defenseStat);
+
+            // SAVE FUSION ITEMS
+            NbtList fusionList = new NbtList();
+            for (ItemStack stack : this.fusionItems) {
+                NbtCompound itemTag = new NbtCompound();
+                stack.writeNbt(itemTag);
+                fusionList.add(itemTag);
+            }
+            nbt.put("FusionItems", fusionList);
+
         } catch (Exception e) {
             System.err.println("PlusUltra: Error writing NBT data: " + e.getMessage());
             e.printStackTrace();
@@ -477,6 +496,17 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
             if (nbt.contains("SpeedStat")) this.speedStat = nbt.getInt("SpeedStat");
             if (nbt.contains("StaminaStat")) this.staminaStat = nbt.getInt("StaminaStat");
             if (nbt.contains("DefenseStat")) this.defenseStat = nbt.getInt("DefenseStat");
+
+            // LOAD FUSION ITEMS
+            this.fusionItems.clear();
+            if (nbt.contains("FusionItems")) {
+                NbtList fusionList = nbt.getList("FusionItems", NbtElement.COMPOUND_TYPE);
+                for (int i = 0; i < fusionList.size(); i++) {
+                    NbtCompound itemTag = fusionList.getCompound(i);
+                    this.fusionItems.add(ItemStack.fromNbt(itemTag));
+                }
+            }
+
             recalculateStats();
         } catch (Exception e) {
             System.err.println("PlusUltra: Error reading NBT data. Restoring defaults.");

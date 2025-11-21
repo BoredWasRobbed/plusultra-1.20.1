@@ -35,5 +35,6 @@ public class QuirkRegistry {
         QuirkRegistry.register(new FloatQuirk());
         QuirkRegistry.register(new AttractionQuirk());
         QuirkRegistry.register(new PropulsionQuirk());
+        QuirkRegistry.register(new OverhaulQuirk());
     }
 }

@@ -44,8 +44,10 @@ public class PlusUltraNetworking {
     private static void handleActivate(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
-            // Stop charging when activating
-            data.setCharging(false);
+
+            // CRITICAL FIX: Do NOT stop charging here immediately.
+            // Stopping charging resets the timer to 0. We need the timer value inside ability.onActivate().
+            // data.setCharging(false); <--- Removed from here
 
             Quirk quirk = data.getQuirk();
             if (quirk != null) {
@@ -54,12 +56,22 @@ public class PlusUltraNetworking {
                 if (ability != null) {
                     if (data.getLevel() < ability.getRequiredLevel()) {
                         player.sendMessage(Text.literal("Locked! Requires Level " + ability.getRequiredLevel()).formatted(Formatting.RED), true);
+                        // Ensure we clean up charge state even if we fail
+                        data.setCharging(false);
                         return;
                     }
                     boolean isOnCooldown = data.getCooldown(slot) > 0;
-                    if (isOnCooldown && !ability.canUseWhileOnCooldown()) return;
+                    if (isOnCooldown && !ability.canUseWhileOnCooldown()) {
+                        data.setCharging(false);
+                        return;
+                    }
                     float cost = ability.getCost(player);
-                    if (!isOnCooldown && data.getStamina() < cost) return;
+                    if (!isOnCooldown && data.getStamina() < cost) {
+                        data.setCharging(false);
+                        return;
+                    }
+
+                    // Activate the ability (It will read the current chargeTimer now)
                     if (ability.onActivate(player.getWorld(), player)) {
                         if (!isOnCooldown) {
                             data.consumeStamina(cost);
@@ -69,6 +81,9 @@ public class PlusUltraNetworking {
                     }
                 }
             }
+
+            // NOW we stop charging and reset the state, after the ability has used the data.
+            data.setCharging(false);
         });
     }
 
@@ -80,15 +95,20 @@ public class PlusUltraNetworking {
         });
     }
 
-    // ... other handlers (cycle, afo, steal, upgrade) unchanged from previous ...
     private static void handleCycle(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responseSender) {
         int direction = buf.readInt();
         boolean isSneaking = buf.readBoolean();
         server.execute(() -> {
             IQuirkData data = (IQuirkData) player;
             if (isSneaking) {
-                data.cycleSelectedAnchor(direction);
-                player.sendMessage(Text.literal("Anchor Selected: " + (data.getSelectedAnchorIndex() + 1) + "/" + data.getWarpAnchorCount()).formatted(Formatting.LIGHT_PURPLE), true);
+                // FIX: Only allow Anchor Cycling if we have anchors or are Warp Gate
+                Quirk q = data.getQuirk();
+                boolean isWarpGate = q != null && q.getId().toString().equals("plusultra:warp_gate");
+
+                if (isWarpGate || data.getWarpAnchorCount() > 0) {
+                    data.cycleSelectedAnchor(direction);
+                    player.sendMessage(Text.literal("Anchor Selected: " + (data.getSelectedAnchorIndex() + 1) + "/" + data.getWarpAnchorCount()).formatted(Formatting.LIGHT_PURPLE), true);
+                }
             } else {
                 data.cycleSlot(direction);
             }

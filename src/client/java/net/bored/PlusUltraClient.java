@@ -50,17 +50,25 @@ public class PlusUltraClient implements ClientModInitializer {
 
 			IQuirkData data = (IQuirkData) client.player;
 			boolean isPropulsion = data.hasQuirk() && data.getQuirk().getId().toString().equals("plusultra:propulsion");
+			boolean isOverhaul = data.hasQuirk() && data.getQuirk().getId().toString().equals("plusultra:overhaul");
 			int selectedSlot = data.getSelectedSlot();
 
-			if (isPropulsion && selectedSlot == 0) {
+			// Allow charging for both Propulsion AND Overhaul on Slot 0
+			if ((isPropulsion || isOverhaul) && selectedSlot == 0) {
 				boolean isPressed = activateKey.isPressed();
 				if (isPressed && !wasActivatePressed) {
 					PacketByteBuf buf = PacketByteBufs.create();
 					buf.writeBoolean(true);
 					ClientPlayNetworking.send(PlusUltraNetworking.CHARGE_ABILITY_PACKET, buf);
+
+					// FIX: Set local state immediately for client-side prediction (HUD)
+					data.setCharging(true);
 				}
 				if (wasActivatePressed && !isPressed) {
 					ClientPlayNetworking.send(PlusUltraNetworking.ACTIVATE_ABILITY_PACKET, PacketByteBufs.create());
+
+					// FIX: Reset local state on release
+					data.setCharging(false);
 				}
 				wasActivatePressed = isPressed;
 				while(activateKey.wasPressed());

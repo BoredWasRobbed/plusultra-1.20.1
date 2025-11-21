@@ -66,7 +66,6 @@ public class QuirkHud implements HudRenderCallback {
                 displayText += String.format(" (%.1fs)", cd / 20.0f);
                 textColor = COOLDOWN_COLOR;
             } else {
-                // UPDATED: Use getCost(player) to reflect dynamic/scaled costs
                 int cost = ability.getCost(client.player);
                 displayText += " [" + cost + "]";
                 textColor = isSelected ? 0xFFD700 : 0xAAAAAA;
@@ -77,7 +76,7 @@ public class QuirkHud implements HudRenderCallback {
             // DRAW ABILITY NAME
             context.drawText(font, displayText, rightEdge - font.getWidth(displayText), abilityY, textColor, true);
 
-            // DRAW INFO (Anchor/Rift) *ABOVE* THE NAME
+            // DRAW INFO (Anchor/Rift/Deconstruct) *ABOVE* THE NAME
             if (isSelected) {
                 if (ability.getName().equals("Gate Anchor")) {
                     abilityY -= 10; // Move UP before drawing anchor text
@@ -97,6 +96,13 @@ public class QuirkHud implements HudRenderCallback {
                         String info = (state == 1) ? "Select Point A" : "Select Point B";
                         context.drawText(font, info, rightEdge - font.getWidth(info), abilityY, 0x55FFFF, true);
                     }
+                }
+                // ADDED: Deconstruct Charge Info
+                else if (ability.getName().equals("Deconstruct") && data.isCharging()) {
+                    abilityY -= 10;
+                    // Updated Text format as requested
+                    String info = "Deconstructing [" + data.getChargeTime() + "]";
+                    context.drawText(font, info, rightEdge - font.getWidth(info), abilityY, 0xFF5555, true);
                 }
             }
 
