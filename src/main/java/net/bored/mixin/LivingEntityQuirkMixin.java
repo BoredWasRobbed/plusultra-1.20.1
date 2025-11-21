@@ -312,16 +312,18 @@ public abstract class LivingEntityQuirkMixin extends Entity implements IQuirkDat
     @Override public int getStatPoints() { return statPoints; }
     @Override public void setStatPoints(int points) { this.statPoints = points; this.syncQuirkData(); }
     @Override public void addStatPoints(int points) { this.statPoints += points; this.syncQuirkData(); }
+
+    // UPDATED SETTERS: Cap at 100
     @Override public int getStrengthStat() { return strengthStat; }
-    @Override public void setStrengthStat(int value) { this.strengthStat = value; recalculateStats(); this.syncQuirkData(); }
+    @Override public void setStrengthStat(int value) { this.strengthStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getHealthStat() { return healthStat; }
-    @Override public void setHealthStat(int value) { this.healthStat = value; recalculateStats(); this.syncQuirkData(); }
+    @Override public void setHealthStat(int value) { this.healthStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getSpeedStat() { return speedStat; }
-    @Override public void setSpeedStat(int value) { this.speedStat = value; recalculateStats(); this.syncQuirkData(); }
+    @Override public void setSpeedStat(int value) { this.speedStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getStaminaStat() { return staminaStat; }
-    @Override public void setStaminaStat(int value) { this.staminaStat = value; recalculateStats(); this.syncQuirkData(); }
+    @Override public void setStaminaStat(int value) { this.staminaStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
     @Override public int getDefenseStat() { return defenseStat; }
-    @Override public void setDefenseStat(int value) { this.defenseStat = value; recalculateStats(); this.syncQuirkData(); }
+    @Override public void setDefenseStat(int value) { this.defenseStat = Math.min(100, value); recalculateStats(); this.syncQuirkData(); }
 
     @Override public void syncQuirkData() {
         if (this.getWorld().isClient) return;

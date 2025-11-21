@@ -51,7 +51,6 @@ public class PlusUltraCommand {
                                                 .executes(ctx -> setStamina(ctx, true)))))
                 )
 
-                // NEW: Leveling Commands
                 .then(CommandManager.literal("level")
                         .then(CommandManager.literal("set")
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
@@ -63,6 +62,13 @@ public class PlusUltraCommand {
                                 .then(CommandManager.argument("target", EntityArgumentType.players())
                                         .then(CommandManager.argument("amount", FloatArgumentType.floatArg(1))
                                                 .executes(PlusUltraCommand::addXp))))
+                )
+                // NEW: Stat Command
+                .then(CommandManager.literal("stat")
+                        .then(CommandManager.literal("give")
+                                .then(CommandManager.argument("target", EntityArgumentType.players())
+                                        .then(CommandManager.argument("points", IntegerArgumentType.integer(1))
+                                                .executes(PlusUltraCommand::giveStatPoints))))
                 )
         );
     }
@@ -78,16 +84,21 @@ public class PlusUltraCommand {
             IQuirkData data = (IQuirkData) player;
             data.setQuirk(quirkId);
             quirk.onEquip(player);
-            context.getSource().sendFeedback(() -> Text.literal("Set quirk to " + quirkId).formatted(Formatting.GREEN), true);
+            // Notify Target
+            player.sendMessage(Text.literal("Your quirk has been set to " + quirk.getName().getString()).formatted(Formatting.GREEN), false);
         }
+        // Notify Source
+        context.getSource().sendFeedback(() -> Text.literal("Set quirk for " + players.size() + " players").formatted(Formatting.GREEN), true);
         return 1;
     }
 
     private static int clearQuirk(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
+        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
+        for (ServerPlayerEntity player : players) {
             ((IQuirkData) player).setQuirk(null);
-            context.getSource().sendFeedback(() -> Text.literal("Cleared quirk").formatted(Formatting.YELLOW), true);
+            player.sendMessage(Text.literal("Your quirk has been cleared.").formatted(Formatting.YELLOW), false);
         }
+        context.getSource().sendFeedback(() -> Text.literal("Cleared quirk for " + players.size() + " players").formatted(Formatting.YELLOW), true);
         return 1;
     }
 
@@ -97,32 +108,61 @@ public class PlusUltraCommand {
     }
 
     private static int setStamina(CommandContext<ServerCommandSource> context, boolean isMax) throws CommandSyntaxException {
+        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
         float amount = FloatArgumentType.getFloat(context, "amount");
-        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
+        for (ServerPlayerEntity player : players) {
             IQuirkData data = (IQuirkData) player;
             if (isMax) data.setMaxStamina(amount);
             else data.setStamina(amount);
-            context.getSource().sendFeedback(() -> Text.literal("Set " + (isMax ? "MAX " : "") + "stamina to " + amount).formatted(Formatting.AQUA), true);
+            player.sendMessage(Text.literal("Your " + (isMax ? "MAX " : "") + "stamina was set to " + amount).formatted(Formatting.AQUA), false);
         }
+        context.getSource().sendFeedback(() -> Text.literal("Updated stamina for " + players.size() + " players").formatted(Formatting.AQUA), true);
         return 1;
     }
 
-    // NEW
     private static int setLevel(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
         int level = IntegerArgumentType.getInteger(context, "level");
-        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
-            ((IQuirkData) player).setLevel(level);
-            context.getSource().sendFeedback(() -> Text.literal("Set Level to " + level).formatted(Formatting.GOLD), true);
+        for (ServerPlayerEntity player : players) {
+            IQuirkData data = (IQuirkData) player;
+            int oldLevel = data.getLevel();
+            data.setLevel(level);
+
+            // Grant retroactive stat points if leveling up
+            // 3 points per level difference
+            if (level > oldLevel) {
+                int points = (level - oldLevel) * 3;
+                data.addStatPoints(points);
+                player.sendMessage(Text.literal("Level set to " + level + ". +" + points + " Stat Points.").formatted(Formatting.GOLD), false);
+            } else {
+                player.sendMessage(Text.literal("Level set to " + level).formatted(Formatting.GOLD), false);
+            }
         }
+        context.getSource().sendFeedback(() -> Text.literal("Set Level to " + level + " for " + players.size() + " players").formatted(Formatting.GOLD), true);
         return 1;
     }
 
     private static int addXp(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
         float amount = FloatArgumentType.getFloat(context, "amount");
-        for (ServerPlayerEntity player : EntityArgumentType.getPlayers(context, "target")) {
+        for (ServerPlayerEntity player : players) {
             ((IQuirkData) player).addXp(amount);
-            context.getSource().sendFeedback(() -> Text.literal("Added " + amount + " XP").formatted(Formatting.GREEN), true);
+            player.sendMessage(Text.literal("Received " + amount + " XP").formatted(Formatting.GREEN), true);
         }
+        context.getSource().sendFeedback(() -> Text.literal("Added " + amount + " XP to " + players.size() + " players").formatted(Formatting.GREEN), true);
+        return 1;
+    }
+
+    // NEW: Give Stat Points
+    private static int giveStatPoints(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        Collection<ServerPlayerEntity> players = EntityArgumentType.getPlayers(context, "target");
+        int points = IntegerArgumentType.getInteger(context, "points");
+        for (ServerPlayerEntity player : players) {
+            IQuirkData data = (IQuirkData) player;
+            data.addStatPoints(points);
+            player.sendMessage(Text.literal("Received " + points + " Stat Points!").formatted(Formatting.LIGHT_PURPLE, Formatting.BOLD), false);
+        }
+        context.getSource().sendFeedback(() -> Text.literal("Gave " + points + " points to " + players.size() + " players").formatted(Formatting.LIGHT_PURPLE), true);
         return 1;
     }
 }
